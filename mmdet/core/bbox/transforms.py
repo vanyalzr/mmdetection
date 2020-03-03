@@ -33,6 +33,59 @@ def bbox2delta(proposals, gt, means=[0, 0, 0, 0], stds=[1, 1, 1, 1]):
 
     return deltas
 
+def keypoints2delta(proposals, gt, means=[0, 0], stds=[1, 1]):
+    assert len(proposals) == len(gt)
+
+    proposals = proposals.float()
+    gt = gt.float()
+    px = (proposals[..., 0] + proposals[..., 2]) * 0.5
+    py = (proposals[..., 1] + proposals[..., 3]) * 0.5
+    pw = proposals[..., 2] - proposals[..., 0] + 1.0
+    ph = proposals[..., 3] - proposals[..., 1] + 1.0
+
+    px = px.reshape(-1, 1).expand_as(gt[..., 0])
+    py = py.reshape(-1, 1).expand_as(gt[..., 1])
+
+    pw = pw.reshape(-1, 1).expand_as(gt[..., 0])
+    ph = ph.reshape(-1, 1).expand_as(gt[..., 1])
+
+    dx = (gt[..., 0] - px) / pw
+    dy = (gt[..., 1] - py) / ph
+    deltas = torch.stack([dx, dy], dim=-1)
+
+    means = deltas.new_tensor(means[:2]).unsqueeze(0)
+    stds = deltas.new_tensor(stds[:2]).unsqueeze(0)
+    deltas = deltas.sub_(means).div_(stds)
+
+    valid = (gt[..., 2] > 0).all(dim=-1).float()
+
+    return deltas, valid
+
+
+def delta2keypoints(proposals,
+                    deltas,
+                    means=(0, 0),
+                    stds=(1, 1)):
+
+    means = deltas.new_tensor(means[:2]).view(1, 1, -1).expand_as(deltas)
+    stds = deltas.new_tensor(stds[:2]).view(1, 1, -1).expand_as(deltas)
+    denorm_deltas = deltas * stds + means
+
+    px = (proposals[..., 0] + proposals[..., 2]) * 0.5
+    py = (proposals[..., 1] + proposals[..., 3]) * 0.5
+    pw = proposals[..., 2] - proposals[..., 0] + 1.0
+    ph = proposals[..., 3] - proposals[..., 1] + 1.0
+
+    px = px.reshape(-1, 1).expand_as(denorm_deltas[..., 0])
+    py = py.reshape(-1, 1).expand_as(denorm_deltas[..., 1])
+
+    pw = pw.reshape(-1, 1).expand_as(denorm_deltas[..., 0])
+    ph = ph.reshape(-1, 1).expand_as(denorm_deltas[..., 1])
+
+    denorm_deltas = denorm_deltas * torch.stack([pw, ph], axis=-1)
+    keypoints = denorm_deltas + torch.stack([px, py], axis=-1)
+
+    return keypoints
 
 def clamp(x, min, max):
     if is_in_onnx_export():
@@ -210,7 +263,7 @@ def roi2bbox(rois):
     return bbox_list
 
 
-def bbox2result(bboxes, labels, num_classes):
+def bbox2result(bboxes, labels, keypoints, num_classes):
     """Convert detection results to a list of numpy arrays.
 
     Args:
@@ -224,11 +277,12 @@ def bbox2result(bboxes, labels, num_classes):
     if bboxes.shape[0] == 0:
         return [
             np.zeros((0, 5), dtype=np.float32) for i in range(num_classes - 1)
-        ]
+        ], [np.zeros((0, 5, 2), dtype=np.float32)]
     else:
         bboxes = to_numpy(bboxes)
         labels = to_numpy(labels)
-        return [bboxes[labels == i, :] for i in range(num_classes - 1)]
+        keypoints = to_numpy(keypoints)
+        return [bboxes[labels == i, :] for i in range(num_classes - 1)], keypoints
 
 
 def distance2bbox(points, distance, max_shape=None):

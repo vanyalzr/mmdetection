@@ -140,6 +140,13 @@ class Resize(object):
             bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, img_shape[0] - 1)
             results[key] = bboxes
 
+    def  _resize_keypoints(self, results):
+        for key in results.get('keypoints_fields', []):
+            if results[key] is None:
+                continue
+            scale = np.array([results['scale_factor'][0], results['scale_factor'][1], 1])
+            results[key] = results[key] * scale
+
     def _resize_masks(self, results):
         for key in results.get('mask_fields', []):
             if results[key] is None:
@@ -175,6 +182,7 @@ class Resize(object):
         self._resize_bboxes(results)
         self._resize_masks(results)
         self._resize_seg(results)
+        self._resize_keypoints(results)
         return results
 
     def __repr__(self):
@@ -199,9 +207,10 @@ class RandomFlip(object):
         flip_ratio (float, optional): The flipping probability.
     """
 
-    def __init__(self, flip_ratio=None, direction='horizontal'):
+    def __init__(self, flip_ratio=None, direction='horizontal', keypoints_symmetry=None):
         self.flip_ratio = flip_ratio
         self.direction = direction
+        self.keypoints_symmetry = keypoints_symmetry
         if flip_ratio is not None:
             assert flip_ratio >= 0 and flip_ratio <= 1
         assert direction in ['horizontal', 'vertical']
@@ -223,6 +232,26 @@ class RandomFlip(object):
             h = img_shape[0]
             flipped[..., 1::4] = h - bboxes[..., 3::4] - 1
             flipped[..., 3::4] = h - bboxes[..., 1::4] - 1
+        else:
+            raise ValueError(
+                'Invalid flipping direction "{}"'.format(direction))
+        return flipped
+
+    def keypoints_flip(self, keypoints, img_shape, direction):
+        flipped = keypoints.copy()
+        assert self.keypoints_symmetry is not None
+        if direction == 'horizontal':
+            w = img_shape[1]
+            for i in range(keypoints.shape[-2]):
+                flipped[..., i, 0] = w - keypoints[..., self.keypoints_symmetry['h'][i], 0] - 1
+                flipped[..., i, 1] = keypoints[..., self.keypoints_symmetry['h'][i], 1]
+                flipped[..., i, 2] = keypoints[..., self.keypoints_symmetry['h'][i], 2]
+        elif direction == 'vertical':
+            h = img_shape[0]
+            for i in range(keypoints.shape[-2]):
+                flipped[..., i, 0] = keypoints[..., self.keypoints_symmetry['v'][i], 0]
+                flipped[..., i, 1] = h - keypoints[..., self.keypoints_symmetry['v'][i], 1] - 1
+                flipped[..., i, 2] = keypoints[..., self.keypoints_symmetry['v'][i], 2]
         else:
             raise ValueError(
                 'Invalid flipping direction "{}"'.format(direction))
@@ -254,6 +283,31 @@ class RandomFlip(object):
             for key in results.get('seg_fields', []):
                 results[key] = mmcv.imflip(
                     results[key], direction=results['flip_direction'])
+
+            for key in results.get('keypoints_fields', []):
+                results[key] = self.keypoints_flip(results[key],
+                                                   results['img_shape'],
+                                                   results['flip_direction'])
+
+
+        # import cv2
+        # dbg_image = results['img'].astype(np.uint8).copy()
+        # for kp in results['gt_keypoints']:
+        #     for i, p in enumerate(kp):
+        #         if p[2] > 0:
+        #             cv2.circle(dbg_image, (int(p[0]), int(p[1])), 3,
+        #                        (255, 0, 0) if p[2] == 2 else (0, 0, 255), 2)
+        #             cv2.putText(dbg_image, str(i), (int(p[0]), int(p[1])), 1, 1, (255, 255, 255))
+        #
+        # for box in results['gt_bboxes']:
+        #     cv2.rectangle(dbg_image, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (0, 255, 0), 2)
+        #
+        # cv2.imshow('image', dbg_image)
+        # if cv2.waitKey(0) == 27:
+        #     exit()
+        #
+        # print(results['gt_bboxes'].shape, results['gt_keypoints'].shape)
+
         return results
 
     def __repr__(self):
@@ -626,8 +680,8 @@ class MinIoURandomCrop(object):
         self.min_crop_size = min_crop_size
 
     def __call__(self, results):
-        img, boxes, labels = [
-            results[k] for k in ('img', 'gt_bboxes', 'gt_labels')
+        img, boxes, labels, keypoints = [
+            results[k] for k in ('img', 'gt_bboxes', 'gt_labels', 'gt_keypoints')
         ]
         h, w, c = img.shape
         while True:
@@ -662,6 +716,8 @@ class MinIoURandomCrop(object):
                     continue
                 boxes = boxes[mask]
                 labels = labels[mask]
+                if len(keypoints) > 0:
+                    keypoints = keypoints[mask]
 
                 # adjust boxes
                 img = img[patch[1]:patch[3], patch[0]:patch[2]]
@@ -669,9 +725,13 @@ class MinIoURandomCrop(object):
                 boxes[:, :2] = boxes[:, :2].clip(min=patch[:2])
                 boxes -= np.tile(patch[:2], 2)
 
+                if len(keypoints) > 0:
+                    keypoints -= np.array([patch[0], patch[1], 0])
+
                 results['img'] = img
                 results['gt_bboxes'] = boxes
                 results['gt_labels'] = labels
+                results['gt_keypoints'] = keypoints
 
                 if 'gt_masks' in results:
                     valid_masks = [

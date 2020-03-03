@@ -1,4 +1,5 @@
 from .atss import ATSS
+from .atss_lm import ATSSLm
 from .base import BaseDetector
 from .cascade_rcnn import CascadeRCNN
 from .double_head_rcnn import DoubleHeadRCNN

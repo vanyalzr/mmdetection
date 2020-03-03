@@ -10,6 +10,7 @@ from mmdet.ops.nms import nms_wrapper
 
 def multiclass_nms(multi_bboxes,
                    multi_scores,
+                   multi_keypoints,
                    score_thr,
                    nms_cfg,
                    max_num=-1,
@@ -37,13 +38,14 @@ def multiclass_nms(multi_bboxes,
         scores = multi_scores * score_factors.view(*target_shape).expand_as(multi_scores)
     else:
         scores = multi_scores
-    combined_bboxes = GenericMulticlassNMS.apply(multi_bboxes, scores,
+    combined_bboxes, keypoints = GenericMulticlassNMS.apply(multi_bboxes, scores, multi_keypoints,
                                                  score_thr, nms_cfg, max_num)
     _, topk_inds = topk(combined_bboxes[:, 4].view(-1), max_num)
     combined_bboxes = combined_bboxes[topk_inds]
     bboxes = combined_bboxes[:, :5]
     labels = combined_bboxes[:, 5].long().view(-1)
-    return bboxes, labels
+    keypoints = keypoints[topk_inds]
+    return bboxes, labels, keypoints
 
 
 class GenericMulticlassNMS(Function):
@@ -52,6 +54,7 @@ class GenericMulticlassNMS(Function):
     def forward(ctx,
                 multi_bboxes,
                 multi_scores,
+                multi_keypoints,
                 score_thr,
                 nms_cfg,
                 max_num=-1):
@@ -60,7 +63,7 @@ class GenericMulticlassNMS(Function):
         nms_op = getattr(nms_wrapper, nms_op_type)
 
         num_classes = multi_scores.shape[1]
-        bboxes, labels = [], []
+        bboxes, labels, keypoints = [], [], []
         for i in range(num_classes):
             cls_inds = multi_scores[:, i] > score_thr
             if not cls_inds.any():
@@ -71,27 +74,33 @@ class GenericMulticlassNMS(Function):
             else:
                 _bboxes = multi_bboxes[cls_inds, i * 4:(i + 1) * 4]
             _scores = multi_scores[cls_inds, i]
+            _keypoints = multi_keypoints[cls_inds, :]
             cls_dets = torch.cat([_bboxes, _scores[:, None]], dim=1)
-            cls_dets, _ = nms_op(cls_dets, **nms_op_cfg)
+            cls_dets, inds = nms_op(cls_dets, **nms_op_cfg)
+            _keypoints = _keypoints[inds]
             cls_labels = multi_bboxes.new_full((cls_dets.shape[0], ),
                                                i,
                                                dtype=torch.long)
             bboxes.append(cls_dets)
             labels.append(cls_labels)
+            keypoints.append(_keypoints)
 
         if bboxes:
             bboxes = torch.cat(bboxes)
             labels = torch.cat(labels)
+            keypoints = torch.cat(keypoints)
             if bboxes.shape[0] > max_num:
                 _, inds = bboxes[:, -1].topk(max_num, sorted=True)
                 bboxes = bboxes[inds]
                 labels = labels[inds]
+                keypoints = keypoints[inds]
             combined_bboxes = torch.cat(
                 [bboxes, labels.to(bboxes.dtype).unsqueeze(-1)], dim=1)
         else:
             combined_bboxes = multi_bboxes.new_zeros((0, 6))
+            keypoints = multi_keypoints.new_zeros((0, 5, 2))
 
-        return combined_bboxes
+        return combined_bboxes, keypoints
 
     @staticmethod
     def symbolic(g,

@@ -156,7 +156,7 @@ class BaseDetector(nn.Module, metaclass=ABCMeta):
         torch.onnx.export(self, img, export_name, **kwargs)
         self.forward = self.forward_backup
 
-    def show_result(self, data, result, dataset=None, score_thr=0.3, wait_time=0):
+    def show_result(self, data, result, keypoints=None, dataset=None, score_thr=0.3, wait_time=0):
         if isinstance(result, tuple):
             bbox_result, segm_result = result
         else:
@@ -198,6 +198,12 @@ class BaseDetector(nn.Module, metaclass=ABCMeta):
                 for i, bbox in enumerate(bbox_result)
             ]
             labels = np.concatenate(labels)
+
+            import cv2
+            inds = np.where(bboxes[:, -1] > score_thr)[0]
+            for kp in keypoints[inds]:
+                for p in kp:
+                    cv2.circle(img_show, (int(p[0]), int(p[1])), 3, (255, 0, 0), -1)
             mmcv.imshow_det_bboxes(
                 img_show,
                 bboxes,

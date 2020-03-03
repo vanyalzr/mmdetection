@@ -29,6 +29,7 @@ class CustomCocoDataset(CocoDataset):
         gt_labels = []
         gt_bboxes_ignore = []
         gt_masks_ann = []
+        gt_keypoints = []
 
         for i, ann in enumerate(ann_info):
             if ann.get('ignore', False):
@@ -46,6 +47,8 @@ class CustomCocoDataset(CocoDataset):
                 gt_bboxes.append(bbox)
                 gt_labels.append(self.cat2label[ann['category_id']])
                 gt_masks_ann.append(ann['segmentation'])
+                if 'keypoints' in ann:
+                    gt_keypoints.append(np.array(ann['keypoints']).reshape(-1, 3))
 
         if gt_bboxes:
             gt_bboxes = np.array(gt_bboxes, dtype=np.float32)
@@ -53,6 +56,9 @@ class CustomCocoDataset(CocoDataset):
         else:
             gt_bboxes = np.zeros((0, 4), dtype=np.float32)
             gt_labels = np.array([], dtype=np.int64)
+
+        if gt_keypoints:
+            gt_keypoints = np.array(gt_keypoints)
 
         if gt_bboxes_ignore:
             gt_bboxes_ignore = np.array(gt_bboxes_ignore, dtype=np.float32)
@@ -66,6 +72,7 @@ class CustomCocoDataset(CocoDataset):
             labels=gt_labels,
             bboxes_ignore=gt_bboxes_ignore,
             masks=gt_masks_ann,
+            keypoints=gt_keypoints,
             seg_map=seg_map)
 
         return ann

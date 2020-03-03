@@ -42,12 +42,14 @@ class LoadAnnotations(object):
                  with_label=True,
                  with_mask=False,
                  with_seg=False,
+                 with_keypoints=False,
                  poly2mask=True):
         self.with_bbox = with_bbox
         self.with_label = with_label
         self.with_mask = with_mask
         self.with_seg = with_seg
         self.poly2mask = poly2mask
+        self.with_keypoints = with_keypoints
 
     def _load_bboxes(self, results):
         ann_info = results['ann_info']
@@ -88,6 +90,11 @@ class LoadAnnotations(object):
         results['mask_fields'].append('gt_masks')
         return results
 
+    def _load_keypoints(self, results):
+        results['gt_keypoints'] = results['ann_info']['keypoints']
+        results['keypoints_fields'].append('gt_keypoints')
+        return results
+
     def _load_semantic_seg(self, results):
         results['gt_semantic_seg'] = mmcv.imread(
             osp.join(results['seg_prefix'], results['ann_info']['seg_map']),
@@ -106,13 +113,17 @@ class LoadAnnotations(object):
             results = self._load_masks(results)
         if self.with_seg:
             results = self._load_semantic_seg(results)
+        if self.with_keypoints:
+            results = self._load_keypoints(results)
         return results
 
     def __repr__(self):
         repr_str = self.__class__.__name__
-        repr_str += ('(with_bbox={}, with_label={}, with_mask={},'
-                     ' with_seg={})').format(self.with_bbox, self.with_label,
-                                             self.with_mask, self.with_seg)
+        repr_str += (f'(with_bbox={self.with_bbox},'
+                     f' with_label={self.with_label},'
+                     f' with_mask={self.with_mask},'
+                     f' with_seg={self.with_seg}, '
+                     f' with_keypoints={self.with_keypoints})')
         return repr_str
 
 

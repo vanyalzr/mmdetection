@@ -81,7 +81,8 @@ class RPN(BaseDetector, RPNTestMixin):
         # TODO: remove this restriction
         return proposal_list[0].cpu().numpy()
 
-    def show_result(self, data, result, dataset=None, top_k=20):
+    def show_result(self, data, result, keypoints, dataset=None, top_k=20):
+
         """Show RPN proposals on the image.
 
         Although we assume batch size is 1, this method supports arbitrary

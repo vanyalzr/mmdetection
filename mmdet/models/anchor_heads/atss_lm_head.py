@@ -4,8 +4,8 @@ import torch.distributed as dist
 import torch.nn as nn
 from mmcv.cnn import normal_init
 
-from mmdet.core import (PseudoSampler, anchor_inside_flags, bbox2delta,
-                        build_assigner, delta2bbox, force_fp32,
+from mmdet.core import (PseudoSampler, anchor_inside_flags, bbox2delta, keypoints2delta,
+                        build_assigner, delta2bbox, delta2keypoints, force_fp32,
                         images_to_levels, multi_apply, multiclass_nms, unmap)
 from ..builder import build_loss
 from ..registry import HEADS
@@ -34,22 +34,22 @@ class ATSSLandmarksHead(ATSSHead):
     """
 
     def __init__(self,
-                 num_landmarks=5,
-                 landmarks_loss=None,
+                 num_keypoints=5,
+                 loss_keypoints=None,
                  **kwargs):
 
-        self.num_landmarks = num_landmarks
+        self.num_keypoints = num_keypoints
         super().__init__(**kwargs)
-        #self.landmarks_loss = build_loss(landmarks_loss)
+        self.keypoints_loss = build_loss(loss_keypoints)
 
     def _init_layers(self):
         super()._init_layers()
-        self.landmarks = nn.Conv2d(
-            self.feat_channels, self.num_landmarks, 3, padding=1)
+        self.keypoints = nn.Conv2d(
+            self.feat_channels, self.num_keypoints * 2, 3, padding=1)
 
     def init_weights(self):
         super().init_weights()
-        normal_init(self.landmarks, std=0.01)
+        normal_init(self.keypoints, std=0.01)
 
     def forward(self, feats):
         return multi_apply(self.forward_single, feats, self.scales)
@@ -65,11 +65,11 @@ class ATSSLandmarksHead(ATSSHead):
         # we just follow atss, not apply exp in bbox_pred
         bbox_pred = scale(self.atss_reg(reg_feat)).float()
         centerness = self.atss_centerness(reg_feat)
-        landmarks = self.landmarks(reg_feat)
-        return cls_score, bbox_pred, centerness
+        keypoints = self.keypoints(reg_feat)
+        return cls_score, bbox_pred, centerness, keypoints
 
-    def loss_single(self, anchors, cls_score, bbox_pred, centerness, labels,
-                    label_weights, bbox_targets, num_total_samples, cfg):
+    def loss_single(self, anchors, cls_score, bbox_pred, centerness, keypoints,
+                    labels, label_weights, bbox_targets, keypoints_targets, keypoints_valid, num_total_samples, cfg):
 
         anchors = anchors.reshape(-1, 4)
         cls_score = cls_score.permute(0, 2, 3,
@@ -79,6 +79,10 @@ class ATSSLandmarksHead(ATSSHead):
         bbox_targets = bbox_targets.reshape(-1, 4)
         labels = labels.reshape(-1)
         label_weights = label_weights.reshape(-1)
+
+        keypoints = keypoints.permute(0, 2, 3, 1).reshape(-1, self.num_keypoints, 2)
+        keypoints_valid = keypoints_valid.unsqueeze(-1).unsqueeze(-1).expand_as(keypoints_targets).reshape(-1, self.num_keypoints, 2)
+        keypoints_targets = keypoints_targets.reshape(-1, self.num_keypoints, 2)
 
         # classification loss
         loss_cls = self.loss_cls(
@@ -92,6 +96,10 @@ class ATSSLandmarksHead(ATSSHead):
             pos_anchors = anchors[pos_inds]
             pos_centerness = centerness[pos_inds]
 
+            pos_keypoints_targets = keypoints_targets[pos_inds]
+            pos_keypoints_pred = keypoints[pos_inds]
+            pos_keypoints_valid = keypoints_valid[pos_inds]
+
             centerness_targets = self.centerness_target(
                 pos_anchors, pos_bbox_targets)
             pos_decode_bbox_pred = delta2bbox(pos_anchors, pos_bbox_pred,
@@ -100,6 +108,17 @@ class ATSSLandmarksHead(ATSSHead):
             pos_decode_bbox_targets = delta2bbox(pos_anchors, pos_bbox_targets,
                                                  self.target_means,
                                                  self.target_stds)
+
+            pos_decode_keypoints_pred = delta2keypoints(pos_anchors, pos_keypoints_pred,
+                                                        self.target_means,
+                                                        self.target_stds)
+            pos_decode_keypoints_targets = delta2keypoints(pos_anchors, pos_keypoints_targets,
+                                                           self.target_means,
+                                                            self.target_stds)
+
+            loss_keypoints = self.keypoints_loss(pos_decode_keypoints_pred,
+                                                 pos_decode_keypoints_targets,
+                                                 pos_keypoints_valid)
 
             # regression loss
             loss_bbox = self.loss_bbox(
@@ -118,16 +137,19 @@ class ATSSLandmarksHead(ATSSHead):
             loss_bbox = loss_cls * 0
             loss_centerness = loss_bbox * 0
             centerness_targets = torch.tensor(0).cuda()
+            loss_keypoints = loss_cls * 0
 
-        return loss_cls, loss_bbox, loss_centerness, centerness_targets.sum()
+        return loss_cls, loss_bbox, loss_centerness, centerness_targets.sum(), loss_keypoints
 
-    @force_fp32(apply_to=('cls_scores', 'bbox_preds', 'centernesses'))
+    @force_fp32(apply_to=('cls_scores', 'bbox_preds', 'centernesses', 'keypoints'))
     def loss(self,
              cls_scores,
              bbox_preds,
              centernesses,
+             keypoints,
              gt_bboxes,
              gt_labels,
+             gt_keypoints,
              img_metas,
              cfg,
              gt_bboxes_ignore=None):
@@ -144,6 +166,7 @@ class ATSSLandmarksHead(ATSSHead):
             anchor_list,
             valid_flag_list,
             gt_bboxes,
+            gt_keypoints,
             img_metas,
             cfg,
             gt_bboxes_ignore_list=gt_bboxes_ignore,
@@ -153,22 +176,25 @@ class ATSSLandmarksHead(ATSSHead):
             return None
 
         (anchor_list, labels_list, label_weights_list, bbox_targets_list,
-         bbox_weights_list, num_total_pos, num_total_neg) = cls_reg_targets
+         bbox_weights_list, keypoints_targets_list, keypoints_valid_list, num_total_pos, num_total_neg) = cls_reg_targets
 
         num_total_samples = reduce_mean(
             torch.tensor(num_total_pos).cuda()).item()
         num_total_samples = max(num_total_samples, 1.0)
 
         losses_cls, losses_bbox, loss_centerness,\
-            bbox_avg_factor = multi_apply(
+            bbox_avg_factor, loss_keypoints = multi_apply(
                 self.loss_single,
                 anchor_list,
                 cls_scores,
                 bbox_preds,
                 centernesses,
+                keypoints,
                 labels_list,
                 label_weights_list,
                 bbox_targets_list,
+                keypoints_targets_list,
+                keypoints_valid_list,
                 num_total_samples=num_total_samples,
                 cfg=cfg)
 
@@ -178,7 +204,8 @@ class ATSSLandmarksHead(ATSSHead):
         return dict(
             loss_cls=losses_cls,
             loss_bbox=losses_bbox,
-            loss_centerness=loss_centerness)
+            loss_centerness=loss_centerness,
+            loss_keypoints=loss_keypoints)
 
     def centerness_target(self, anchors, bbox_targets):
         # only calculate pos centerness targets, otherwise there may be nan
@@ -199,11 +226,12 @@ class ATSSLandmarksHead(ATSSHead):
         assert not torch.isnan(centerness).any()
         return centerness
 
-    @force_fp32(apply_to=('cls_scores', 'bbox_preds', 'centernesses'))
+    @force_fp32(apply_to=('cls_scores', 'bbox_preds', 'centernesses', 'keypoints_preds'))
     def get_bboxes(self,
                    cls_scores,
                    bbox_preds,
                    centernesses,
+                   keypoints_preds,
                    img_metas,
                    cfg,
                    rescale=False):
@@ -229,10 +257,14 @@ class ATSSLandmarksHead(ATSSHead):
             centerness_pred_list = [
                 centernesses[i][img_id].detach() for i in range(num_levels)
             ]
+            keypoints_pred_list = [
+                keypoints_preds[i][img_id].detach() for i in range(num_levels)
+            ]
             img_shape = img_metas[img_id]['img_shape']
             scale_factor = img_metas[img_id]['scale_factor']
             proposals = self.get_bboxes_single(cls_score_list, bbox_pred_list,
                                                centerness_pred_list,
+                                               keypoints_pred_list,
                                                mlvl_anchors, img_shape,
                                                scale_factor, cfg, rescale)
             result_list.append(proposals)
@@ -242,6 +274,7 @@ class ATSSLandmarksHead(ATSSHead):
                           cls_scores,
                           bbox_preds,
                           centernesses,
+                          keypoints_preds,
                           mlvl_anchors,
                           img_shape,
                           scale_factor,
@@ -251,14 +284,16 @@ class ATSSLandmarksHead(ATSSHead):
         mlvl_bboxes = []
         mlvl_scores = []
         mlvl_centerness = []
-        for cls_score, bbox_pred, centerness, anchors in zip(
-                cls_scores, bbox_preds, centernesses, mlvl_anchors):
+        mlvl_keypoints = []
+
+        for cls_score, bbox_pred, centerness, anchors, keypoints_pred in zip(
+                cls_scores, bbox_preds, centernesses, mlvl_anchors, keypoints_preds):
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
 
-            scores = cls_score.permute(1, 2, 0).reshape(
-                -1, self.cls_out_channels).sigmoid()
+            scores = cls_score.permute(1, 2, 0).reshape(-1, self.cls_out_channels).sigmoid()
             bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, 4)
             centerness = centerness.permute(1, 2, 0).reshape(-1).sigmoid()
+            keypoints_pred = keypoints_pred.permute(1, 2, 0).reshape(-1, self.num_keypoints, 2)
 
             nms_pre = cfg.get('nms_pre', -1)
             if nms_pre > 0 and scores.shape[0] > nms_pre:
@@ -268,33 +303,41 @@ class ATSSLandmarksHead(ATSSHead):
                 bbox_pred = bbox_pred[topk_inds, :]
                 scores = scores[topk_inds, :]
                 centerness = centerness[topk_inds]
+                keypoints_pred = keypoints_pred[topk_inds]
 
             bboxes = delta2bbox(anchors, bbox_pred, self.target_means,
                                 self.target_stds, img_shape)
+            keypoints = delta2keypoints(anchors, keypoints_pred, self.target_means,
+                                        self.target_stds)
             mlvl_bboxes.append(bboxes)
             mlvl_scores.append(scores)
             mlvl_centerness.append(centerness)
+            mlvl_keypoints.append(keypoints)
 
         mlvl_bboxes = torch.cat(mlvl_bboxes)
+        mlvl_keypoints = torch.cat(mlvl_keypoints)
         if rescale:
             mlvl_bboxes /= mlvl_bboxes.new_tensor(scale_factor)
+            mlvl_keypoints /= mlvl_keypoints.new_tensor(scale_factor[:2])
 
         mlvl_scores = torch.cat(mlvl_scores)
         mlvl_centerness = torch.cat(mlvl_centerness)
 
-        det_bboxes, det_labels = multiclass_nms(
+        det_bboxes, det_labels, det_keypoints = multiclass_nms(
             mlvl_bboxes,
             mlvl_scores,
+            mlvl_keypoints,
             cfg.score_thr,
             cfg.nms,
             cfg.max_per_img,
             score_factors=mlvl_centerness)
-        return det_bboxes, det_labels
+        return det_bboxes, det_labels, det_keypoints
 
     def atss_target(self,
                     anchor_list,
                     valid_flag_list,
                     gt_bboxes_list,
+                    gt_keypoints_list,
                     img_metas,
                     cfg,
                     gt_bboxes_ignore_list=None,
@@ -324,7 +367,7 @@ class ATSSLandmarksHead(ATSSHead):
         if gt_labels_list is None:
             gt_labels_list = [None for _ in range(num_imgs)]
         (all_anchors, all_labels, all_label_weights, all_bbox_targets,
-         all_bbox_weights, pos_inds_list, neg_inds_list) = multi_apply(
+         all_bbox_weights, all_keypoints_targets, all_keypoints_valid, pos_inds_list, neg_inds_list) = multi_apply(
              self.atss_target_single,
              anchor_list,
              valid_flag_list,
@@ -332,6 +375,7 @@ class ATSSLandmarksHead(ATSSHead):
              gt_bboxes_list,
              gt_bboxes_ignore_list,
              gt_labels_list,
+             gt_keypoints_list,
              img_metas,
              cfg=cfg,
              label_channels=label_channels,
@@ -351,8 +395,13 @@ class ATSSLandmarksHead(ATSSHead):
                                              num_level_anchors)
         bbox_weights_list = images_to_levels(all_bbox_weights,
                                              num_level_anchors)
+
+        keypoints_targets_list = images_to_levels(all_keypoints_targets, num_level_anchors)
+        keypoints_valid_list = images_to_levels(all_keypoints_valid, num_level_anchors)
+
         return (anchors_list, labels_list, label_weights_list,
-                bbox_targets_list, bbox_weights_list, num_total_pos,
+                bbox_targets_list, bbox_weights_list,
+                keypoints_targets_list, keypoints_valid_list, num_total_pos,
                 num_total_neg)
 
     def atss_target_single(self,
@@ -362,6 +411,7 @@ class ATSSLandmarksHead(ATSSHead):
                            gt_bboxes,
                            gt_bboxes_ignore,
                            gt_labels,
+                           gt_keypoints,
                            img_meta,
                            cfg,
                            label_channels=1,
@@ -380,10 +430,10 @@ class ATSSLandmarksHead(ATSSHead):
         assign_result = bbox_assigner.assign(anchors, num_level_anchors_inside,
                                              gt_bboxes, gt_bboxes_ignore,
                                              gt_labels)
-
         bbox_sampler = PseudoSampler()
         sampling_result = bbox_sampler.sample(assign_result, anchors,
                                               gt_bboxes)
+        pos_gt_keypoints = gt_keypoints[sampling_result.pos_assigned_gt_inds, :]
 
         num_valid_anchors = anchors.shape[0]
         bbox_targets = torch.zeros_like(anchors)
@@ -391,14 +441,22 @@ class ATSSLandmarksHead(ATSSHead):
         labels = anchors.new_zeros(num_valid_anchors, dtype=torch.long)
         label_weights = anchors.new_zeros(num_valid_anchors, dtype=torch.float)
 
+        keypoints_targets = anchors.new_zeros((num_valid_anchors, self.num_keypoints, 2), dtype=torch.float)
+        keypoints_valid = anchors.new_zeros(num_valid_anchors, dtype=torch.float)
+
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
         if len(pos_inds) > 0:
             pos_bbox_targets = bbox2delta(sampling_result.pos_bboxes,
                                           sampling_result.pos_gt_bboxes,
                                           self.target_means, self.target_stds)
+            pos_keypoints_targets, valid = keypoints2delta(sampling_result.pos_bboxes,
+                                                           pos_gt_keypoints,
+                                                           self.target_means, self.target_stds)
             bbox_targets[pos_inds, :] = pos_bbox_targets
             bbox_weights[pos_inds, :] = 1.0
+            keypoints_targets[pos_inds] = pos_keypoints_targets
+            keypoints_valid[pos_inds] = valid
             if gt_labels is None:
                 labels[pos_inds] = 1
             else:
@@ -420,8 +478,10 @@ class ATSSLandmarksHead(ATSSHead):
                                   inside_flags)
             bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
             bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
+            keypoints_targets = unmap(keypoints_targets, num_total_anchors, inside_flags)
+            keypoints_valid = unmap(keypoints_valid, num_total_anchors, inside_flags)
 
-        return (anchors, labels, label_weights, bbox_targets, bbox_weights,
+        return (anchors, labels, label_weights, bbox_targets, bbox_weights, keypoints_targets, keypoints_valid,
                 pos_inds, neg_inds)
 
     def get_num_level_anchors_inside(self, num_level_anchors, inside_flags):

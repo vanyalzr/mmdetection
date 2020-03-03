@@ -43,7 +43,7 @@ class DistEvalHook(Hook):
 
             # compute output
             with torch.no_grad():
-                result = runner.model(
+                result, keypoints = runner.model(
                     return_loss=False, rescale=True, **data_gpu)
             results[idx] = result
 

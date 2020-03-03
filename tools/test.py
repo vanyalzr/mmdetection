@@ -27,7 +27,7 @@ def single_gpu_test(model, data_loader, show=False, flip=False):
         with torch.no_grad():
             if flip:
                 data['img'][0] = torch.flip(data['img'][0], dims=(3,))
-            result = model(return_loss=False, rescale=not show, **data)
+            result, keypoints = model(return_loss=False, rescale=not show, **data)
 
             if flip:
                 width = data['img_meta'][0]._data[0][0]['ori_shape'][1]
@@ -37,7 +37,7 @@ def single_gpu_test(model, data_loader, show=False, flip=False):
         results.append(result)
 
         if show:
-            model.module.show_result(data, result, wait_time=-1)
+            model.module.show_result(data, result, keypoints=keypoints, wait_time=-1)
 
         batch_size = data['img'][0].size(0)
         for _ in range(batch_size):

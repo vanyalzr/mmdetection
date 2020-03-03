@@ -88,6 +88,7 @@ class SingleStageDetector(BaseDetector):
     def postprocess(self,
                     det_bboxes,
                     det_labels,
+                    det_keypoints,
                     det_masks,
                     img_meta,
                     rescale=False):
@@ -97,11 +98,13 @@ class SingleStageDetector(BaseDetector):
             scale_factor = img_meta[0]['scale_factor']
             if isinstance(det_bboxes, torch.Tensor):
                 det_bboxes[:, :4] /= det_bboxes.new_tensor(scale_factor)
+                det_keypoints /= det_keypoints.new_tensor(scale_factor[:2])
             else:
                 det_bboxes[:, :4] /= np.asarray(scale_factor)
+                det_keypoints /= np.asarray(scale_factor[:2])
 
-        bbox_results = bbox2result(det_bboxes, det_labels, num_classes)
-        return bbox_results
+        bbox_results, keypoints_results = bbox2result(det_bboxes, det_labels, det_keypoints, num_classes)
+        return bbox_results, keypoints_results
 
     def aug_test(self, imgs, img_metas, rescale=False):
         raise NotImplementedError
