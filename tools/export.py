@@ -190,7 +190,7 @@ def main(args):
                                osp.splitext(osp.basename(args.config))[0] + '.onnx')
     
     with torch.no_grad():
-        export_to_onnx(model, fake_data, export_name=onnx_model_path, opset=10,
+        export_to_onnx(model, fake_data, export_name=onnx_model_path, opset=11,
                        alt_ssd_export=getattr(args, 'alt_ssd_export', False))
         add_node_names(onnx_model_path)
         print(f'ONNX model has been saved to "{onnx_model_path}"')
