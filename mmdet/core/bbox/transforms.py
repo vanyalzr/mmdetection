@@ -281,7 +281,8 @@ def bbox2result(bboxes, labels, keypoints, num_classes):
     else:
         bboxes = to_numpy(bboxes)
         labels = to_numpy(labels)
-        keypoints = to_numpy(keypoints)
+        if keypoints is not None:
+            keypoints = to_numpy(keypoints)
         return [bboxes[labels == i, :] for i in range(num_classes - 1)], keypoints
 
 

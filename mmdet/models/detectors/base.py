@@ -201,9 +201,10 @@ class BaseDetector(nn.Module, metaclass=ABCMeta):
 
             import cv2
             inds = np.where(bboxes[:, -1] > score_thr)[0]
-            for kp in keypoints[inds]:
-                for p in kp:
-                    cv2.circle(img_show, (int(p[0]), int(p[1])), 3, (255, 0, 0), -1)
+            if keypoints is not None:
+                for kp in keypoints[inds]:
+                    for p in kp:
+                        cv2.circle(img_show, (int(p[0]), int(p[1])), 3, (255, 0, 0), -1)
             mmcv.imshow_det_bboxes(
                 img_show,
                 bboxes,

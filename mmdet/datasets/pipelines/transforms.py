@@ -680,9 +680,10 @@ class MinIoURandomCrop(object):
         self.min_crop_size = min_crop_size
 
     def __call__(self, results):
-        img, boxes, labels, keypoints = [
-            results[k] for k in ('img', 'gt_bboxes', 'gt_labels', 'gt_keypoints')
+        img, boxes, labels = [
+            results[k] for k in ('img', 'gt_bboxes', 'gt_labels')
         ]
+        keypoints = results.get('gt_keypoints', None)
         h, w, c = img.shape
         while True:
             mode = random.choice(self.sample_mode)
@@ -716,7 +717,7 @@ class MinIoURandomCrop(object):
                     continue
                 boxes = boxes[mask]
                 labels = labels[mask]
-                if len(keypoints) > 0:
+                if keypoints is not None and len(keypoints) > 0:
                     keypoints = keypoints[mask]
 
                 # adjust boxes
@@ -725,13 +726,14 @@ class MinIoURandomCrop(object):
                 boxes[:, :2] = boxes[:, :2].clip(min=patch[:2])
                 boxes -= np.tile(patch[:2], 2)
 
-                if len(keypoints) > 0:
+                if keypoints is not None and len(keypoints) > 0:
                     keypoints -= np.array([patch[0], patch[1], 0])
 
                 results['img'] = img
                 results['gt_bboxes'] = boxes
                 results['gt_labels'] = labels
-                results['gt_keypoints'] = keypoints
+                if keypoints is not None:
+                    results['gt_keypoints'] = keypoints
 
                 if 'gt_masks' in results:
                     valid_masks = [
