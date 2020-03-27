@@ -58,6 +58,7 @@ def keypoints2delta(proposals, gt, means=[0, 0], stds=[1, 1]):
     deltas = deltas.sub_(means).div_(stds)
 
     valid = (gt[..., 2] > 0).all(dim=-1).float()
+    deltas = deltas * valid.unsqueeze(-1).unsqueeze(-1).expand_as(deltas)
 
     return deltas, valid
 

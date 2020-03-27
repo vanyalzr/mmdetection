@@ -45,7 +45,7 @@ class ATSSLandmarksHead(ATSSHead):
     def _init_layers(self):
         super()._init_layers()
         self.keypoints = nn.Conv2d(
-            self.feat_channels, self.num_keypoints * 2, 3, padding=1)
+            self.feat_channels, self.num_anchors * self.num_keypoints * 2, 3, padding=1)
 
     def init_weights(self):
         super().init_weights()
