@@ -335,7 +335,7 @@ class ATSSHead(AnchorHead):
         mlvl_scores = torch.cat(mlvl_scores)
         mlvl_centerness = torch.cat(mlvl_centerness)
 
-        det_bboxes, det_labels, _ = multiclass_nms(
+        det_bboxes, det_labels = multiclass_nms(
             mlvl_bboxes,
             mlvl_scores,
             None,

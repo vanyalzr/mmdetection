@@ -328,7 +328,7 @@ class AnchorHead(nn.Module):
         if rescale:
             mlvl_bboxes /= mlvl_bboxes.new_tensor(scale_factor)
         mlvl_scores = torch.cat(mlvl_scores)
-        det_bboxes, det_labels = multiclass_nms(mlvl_bboxes, mlvl_scores,
+        det_bboxes, det_labels = multiclass_nms(mlvl_bboxes, mlvl_scores, None,
                                                 cfg.score_thr, cfg.nms,
                                                 cfg.max_per_img)
         return det_bboxes, det_labels

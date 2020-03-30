@@ -44,15 +44,19 @@ def multiclass_nms(multi_bboxes,
                                                                              multi_keypoints,
                                                                              score_thr, nms_cfg, max_num)
     else:
-        combined_bboxes, keypoints = GenericMulticlassNMS.apply(multi_bboxes, scores,
+        combined_bboxes = GenericMulticlassNMS.apply(multi_bboxes, scores,
                                                                 score_thr, nms_cfg, max_num)
 
     _, topk_inds = topk(combined_bboxes[:, 4].view(-1), max_num)
     combined_bboxes = combined_bboxes[topk_inds]
     bboxes = combined_bboxes[:, :5]
     labels = combined_bboxes[:, 5].long().view(-1)
-    keypoints = keypoints[topk_inds]
-    return bboxes, labels, keypoints
+
+    if multi_keypoints is not None:
+        keypoints = keypoints[topk_inds]
+        return bboxes, labels, keypoints
+    else:
+        return bboxes, labels
 
 
 class GenericMulticlassNMS(Function):
