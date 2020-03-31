@@ -116,13 +116,10 @@ class ATSSLandmarksHead(ATSSHead):
                                                            self.target_means,
                                                             self.target_stds)
 
-
-            num_keypoints_valid = torch.sum(pos_keypoints_valid)
-            num_keypoints_valid = max(num_keypoints_valid, 1)
-
             loss_keypoints = self.keypoints_loss(pos_decode_keypoints_pred,
                                                  pos_decode_keypoints_targets,
-                                                 weight=pos_keypoints_valid / num_keypoints_valid  * self.num_keypoints * 2)
+                                                 weight=pos_keypoints_valid,
+                                                 avg_factor=max(torch.sum(pos_keypoints_valid), 1))
 
             # regression loss
             loss_bbox = self.loss_bbox(
