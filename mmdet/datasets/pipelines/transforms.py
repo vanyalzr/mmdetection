@@ -405,6 +405,54 @@ class Normalize(object):
             self.mean, self.std, self.to_rgb)
         return repr_str
 
+import cv2
+
+def imdenormalize(img, mean, std, to_bgr=True):
+    assert img.dtype != np.uint8
+    mean = mean.reshape(1, -1).astype(np.float64)
+    std = std.reshape(1, -1).astype(np.float64)
+    img = cv2.multiply(img, std)  # make a copy
+    cv2.add(img, mean, img)  # inplace
+    if to_bgr:
+        cv2.cvtColor(img, cv2.COLOR_RGB2BGR, img)  # inplace
+    return img
+
+@PIPELINES.register_module
+class Visualize:
+    def __init__(self, delay, mean, std, to_rgb):
+        self.delay = delay
+        self.mean = mean
+        self.std = std
+        self.to_rgb = to_rgb
+
+        self.upscale = 2
+
+    def __call__(self, results):
+        if self.delay < 0:
+            return results
+
+        img = results['img'].copy()
+        img = imdenormalize(img, np.array(self.mean), np.array(self.std), self.to_rgb)
+        img = img.astype(np.uint8)
+        img_size = img.shape[1] * self.upscale, img.shape[0] * self.upscale
+
+        img = cv2.resize(img, img_size)
+
+        for bbox in results['gt_bboxes']:
+            p1 = int(bbox[0]) * self.upscale, int(bbox[1]) * self.upscale
+            p2 = int(bbox[2]) * self.upscale, int(bbox[3]) * self.upscale
+            cv2.rectangle(img, p1, p2, (255, 0, 0), 2)
+
+        for kp in results['gt_keypoints']:
+            for p in kp:
+                c = int(p[0] * self.upscale), int(p[1] * self.upscale)
+                cv2.circle(img, c, 1, (0, 0, 255), 2)
+
+        cv2.imshow('image', img)
+        cv2.waitKey(self.delay)
+
+        return results
+
 
 @PIPELINES.register_module
 class RandomCrop(object):
