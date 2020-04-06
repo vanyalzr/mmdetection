@@ -403,6 +403,11 @@ class ModulatedDeformConvPack(ModulatedDeformConv):
     _version = 2
 
     def __init__(self, *args, **kwargs):
+        if 'freeze_offsets' in kwargs:
+            self.freeze_offsets = kwargs['freeze_offsets']
+            del kwargs['freeze_offsets']
+        else:
+            self.freeze_offsets = 0
         super(ModulatedDeformConvPack, self).__init__(*args, **kwargs)
 
         self.conv_offset = Conv2d(
@@ -421,7 +426,7 @@ class ModulatedDeformConvPack(ModulatedDeformConv):
         self.conv_offset.bias.data.zero_()
 
     def forward(self, x):
-        if self.training and self.counter < 1000:
+        if self.training and self.counter < self.freeze_offsets:
             h_out = compute_output_dim(x.shape[2],
                                        self.conv_offset.padding[0],
                                        self.conv_offset.dilation[0],
