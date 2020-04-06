@@ -95,7 +95,7 @@ class FPN(nn.Module):
     # default init_weights for conv(msra) and norm in ConvModule
     def init_weights(self):
         for m in self.modules():
-            if isinstance(m, nn.Conv2d):
+            if type(m) == nn.Conv2d:
                 xavier_init(m, distribution='uniform')
 
     @auto_fp16()

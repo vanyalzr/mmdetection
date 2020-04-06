@@ -377,6 +377,12 @@ class ModulatedDeformConv(nn.Module):
                                      self.stride, self.padding, self.dilation,
                                      self.groups, self.deformable_groups)
 
+def compute_output_dim(dim_in, padding, dilation, kernel_size, stride):
+    import math
+    return math.floor((dim_in + 2 * padding - dilation * (kernel_size - 1) - 1) / stride + 1)
+
+class Conv2d(nn.Conv2d):
+    pass
 
 class ModulatedDeformConvPack(ModulatedDeformConv):
     """A ModulatedDeformable Conv Encapsulation that acts as normal Conv layers.
@@ -399,7 +405,7 @@ class ModulatedDeformConvPack(ModulatedDeformConv):
     def __init__(self, *args, **kwargs):
         super(ModulatedDeformConvPack, self).__init__(*args, **kwargs)
 
-        self.conv_offset = nn.Conv2d(
+        self.conv_offset = Conv2d(
             self.in_channels,
             self.deformable_groups * 3 * self.kernel_size[0] *
             self.kernel_size[1],
@@ -408,13 +414,30 @@ class ModulatedDeformConvPack(ModulatedDeformConv):
             padding=_pair(self.padding),
             bias=True)
         self.init_offset()
+        self.counter = 0
 
     def init_offset(self):
         self.conv_offset.weight.data.zero_()
         self.conv_offset.bias.data.zero_()
 
     def forward(self, x):
-        out = self.conv_offset(x)
+        if self.training and self.counter < 1000:
+            h_out = compute_output_dim(x.shape[2],
+                                       self.conv_offset.padding[0],
+                                       self.conv_offset.dilation[0],
+                                       self.conv_offset.kernel_size[0],
+                                       self.conv_offset.stride[0])
+            w_out = compute_output_dim(x.shape[3],
+                                       self.conv_offset.padding[1],
+                                       self.conv_offset.dilation[1],
+                                       self.conv_offset.kernel_size[1],
+                                       self.conv_offset.stride[1])
+            output_shape = (x.shape[0], self.conv_offset.out_channels, h_out, w_out)
+            out = torch.zeros(output_shape, dtype=x.dtype, device=x.device)
+            self.counter += 1
+        else:
+            out = self.conv_offset(x)
+
         o1, o2, mask = torch.chunk(out, 3, dim=1)
         offset = torch.cat((o1, o2), dim=1)
         mask = torch.sigmoid(mask)
