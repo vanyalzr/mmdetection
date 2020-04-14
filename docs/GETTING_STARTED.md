@@ -187,16 +187,13 @@ To opt for this model representation use `--alt_ssd_export` option.
 
 ### Test exported model
 
-In order to test the model being exported via a `tools/export.py` script run the following command:
+In order to test the exported model run the following command:
 
 ```shell
 # python tools/test_exported.py config.py ${DEPLOY_DIR}/checkpoint.xml --out /tmp/out.pkl
-``` 
+```
 
-If you chose to use alternative SSD model representation, specifying the `--alt_ssd_export` key for `tools/export.py`,
-use an extra `--with_detection_output` key for the test script.
-
-To get quality metrics on test dataset either add `--eval bbox` argument to the call of the `tools/test_exported.py` script for COCO-style dataset, or run `tools/voc_eval.py` script passing dumped detection results (`test_results.pkl`) to it for a VOC-style dataset. 
+To get quality metrics on test dataset either add `--eval bbox` argument to the call of the `tools/test_exported.py` script for COCO-style dataset, or run `tools/voc_eval.py` script passing dumped detection results (`test_results.pkl`) to it for a VOC-style dataset.
 
 ## Train a model
 
@@ -270,7 +267,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 PORT=29500 ./tools/dist_train.sh ${CONFIG_FILE} 4
 CUDA_VISIBLE_DEVICES=4,5,6,7 PORT=29501 ./tools/dist_train.sh ${CONFIG_FILE} 4
 ```
 
-If you use launch training jobs with slurm, you need to modify the config files (usually the 6th line from the bottom in config files) to set different communication ports. 
+If you use launch training jobs with slurm, you need to modify the config files (usually the 6th line from the bottom in config files) to set different communication ports.
 
 In `config1.py`,
 ```python
