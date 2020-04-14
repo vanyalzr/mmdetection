@@ -107,6 +107,9 @@ def main(args):
     else:
         raise ValueError('Unknown model type.')
 
+    if args.eval and not args.out:
+        raise ValueError('The --out parameter must be specified in case of --eval specified.')
+
     cfg = mmcv.Config.fromfile(args.config)
     cfg.model.pretrained = None
     cfg.data.test.test_mode = True
@@ -174,8 +177,9 @@ def main(args):
             prog_bar.update()
 
     print('')
-    print('Writing results to {}'.format(args.out))
-    mmcv.dump(results, args.out)
+    if args.out:
+        print('Writing results to {}'.format(args.out))
+        mmcv.dump(results, args.out)
 
     eval_types = args.eval
     if eval_types:
