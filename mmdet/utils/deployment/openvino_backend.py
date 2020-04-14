@@ -77,6 +77,8 @@ class IECore(object):
             cls.instance = IECore_()
         return cls.instance
 
+class OutputNotFoundError(Exception):
+    pass
 
 class ModelOpenVINO(object):
 
@@ -163,6 +165,8 @@ class ModelOpenVINO(object):
                 net_outputs_mapping[o] = o
         else:
             for required_output in required_outputs:
+                if required_output not in self.get_mapping():
+                    raise OutputNotFoundError
                 output = self.get_mapping()[required_output]
                 try:
                     net.add_outputs(output)
@@ -208,13 +212,19 @@ class ModelOpenVINO(object):
 
 
 class DetectorOpenVINO(ModelOpenVINO):
-    def __init__(self, *args, with_detection_output=False, **kwargs):
-        super().__init__(*args,
-                         required_inputs=('image', ),
-                         required_outputs=('detection_out',) if with_detection_output else ('boxes', 'labels'),
-                         **kwargs)
-
-        self.with_detection_output = with_detection_output
+    def __init__(self, *args, **kwargs):
+        try:
+            super().__init__(*args,
+                             required_inputs=('image', ),
+                             required_outputs=('detection_out',),
+                             **kwargs)
+            self.with_detection_output = True
+        except OutputNotFoundError:
+            super().__init__(*args,
+                             required_inputs=('image',),
+                             required_outputs=('boxes', 'labels'),
+                             **kwargs)
+            self.with_detection_output = False
 
         self.n, self.c, self.h, self.w = self.net.inputs['image'].shape
         assert self.n == 1, 'Only batch 1 is supported.'
