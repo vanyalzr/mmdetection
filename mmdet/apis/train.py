@@ -1,3 +1,4 @@
+import os
 import random
 
 import numpy as np
@@ -79,7 +80,10 @@ def train_detector(model,
     ]
 
     map_location = 'default'
-    if torch.cuda.is_available():
+    if os.getenv('CPU_ONLY', '0') == '1':
+        model = MMDataCPU(model)
+        map_location = 'cpu'
+    else:
         if distributed:
             # put model on gpus
             find_unused_parameters = cfg.get('find_unused_parameters', False)
@@ -93,9 +97,6 @@ def train_detector(model,
         else:
             model = MMDataParallel(
                 model.cuda(cfg.gpu_ids[0]), device_ids=cfg.gpu_ids)
-    else:
-        model = MMDataCPU(model)
-        map_location = 'cpu'
 
     # build runner
     optimizer = build_optimizer(model, cfg.optimizer)

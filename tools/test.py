@@ -127,7 +127,11 @@ def main():
     else:
         model.CLASSES = dataset.CLASSES
 
-    if torch.cuda.is_available():
+    if os.getenv('CPU_ONLY', '0') == '1':
+        model = MMDataCPU(model)
+        outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
+                                  args.show_score_thr)
+    else:
         if not distributed:
             model = MMDataParallel(model, device_ids=[0])
             outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
@@ -139,10 +143,6 @@ def main():
                 broadcast_buffers=False)
             outputs = multi_gpu_test(model, data_loader, args.tmpdir,
                                      args.gpu_collect)
-    else:
-        model = MMDataCPU(model)
-        outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
-                                  args.show_score_thr)
 
     rank, _ = get_dist_info()
     if rank == 0:
