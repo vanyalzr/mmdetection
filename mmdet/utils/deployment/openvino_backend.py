@@ -63,14 +63,14 @@ class ModelOpenVINO:
                  cfg=None,
                  classes=None):
 
-        ie = IECore()
+        self.ie = IECore()
         logging.info('Reading network from IR...')
         if bin_file_path is None:
             bin_file_path = osp.splitext(xml_file_path)[0] + '.bin'
         if mapping_file_path is None:
             mapping_file_path = osp.splitext(xml_file_path)[0] + '.mapping'
 
-        self.net = ie.read_network(model=xml_file_path, weights=bin_file_path)
+        self.net = self.ie.read_network(model=xml_file_path, weights=bin_file_path)
 
         self.orig_ir_mapping = self.get_mapping(mapping_file_path)
         self.ir_orig_mapping = {v: k for k, v in self.orig_ir_mapping.items()}
@@ -81,11 +81,13 @@ class ModelOpenVINO:
         self.configure_outputs(required_outputs)
 
         if 'CPU' in device:
-            self.check_cpu_support(ie, self.net)
+            self.check_cpu_support(self.ie, self.net)
 
         logging.info('Loading network to plugin...')
         self.max_num_requests = max_num_requests
-        self.exec_net = ie.load_network(network=self.net, device_name=device, num_requests=max_num_requests)
+        self.exec_net = self.ie.load_network(network=self.net, device_name=device, num_requests=max_num_requests)
+        self.device = device
+        self.max_num_requests = max_num_requests
 
         self.perf_counters = None
         if collect_perf_counters:
@@ -245,6 +247,12 @@ class DetectorOpenVINO(ModelOpenVINO):
         inputs['image'] = np.pad(inputs['image'],
                                  ((0, 0), (0, 0), (0, self.h - data_h), (0, self.w - data_w)),
                                  mode='constant')
+
+        # if data_h != self.h or data_w != self.w or True:
+        #     print('reshape!', inputs['image'].shape)
+        #     self.net.reshape({'image': inputs['image'].shape})
+        #     self.h, self.w = data_h, data_w
+        #     self.exec_net = self.ie.load_network(network=self.net, device_name=self.device, num_requests=self.max_num_requests)
 
         output = super().__call__(inputs)
         if self.with_detection_output:
