@@ -61,6 +61,10 @@ def plot_curve(log_dicts, args):
                 ax = plt.gca()
                 ax.set_xticks(xs)
                 plt.xlabel('epoch')
+                if len(xs) > len(ys):
+                    xs = xs[:-(len(xs) - len(ys))]
+                elif len(ys) > len(xs):
+                    ys = ys[:-(len(ys) - len(xs))]
                 plt.plot(xs, ys, label=legend[i * num_metrics + j], marker='o')
             else:
                 xs = []
@@ -76,6 +80,10 @@ def plot_curve(log_dicts, args):
                 xs = np.concatenate(xs)
                 ys = np.concatenate(ys)
                 plt.xlabel('iter')
+                if len(xs) > len(ys):
+                    xs = xs[:-(len(xs) - len(ys))]
+                elif len(ys) > len(xs):
+                    ys = ys[:-(len(ys) - len(xs))]
                 plt.plot(
                     xs, ys, label=legend[i * num_metrics + j], linewidth=0.5)
             plt.legend()
