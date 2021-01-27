@@ -134,27 +134,29 @@ class DetectorX(Model):
         print(f'min_size={self.min_size}, max_size={self.max_size}')
 
         shape_h = [batch_size, channels_num, self.min_size, self.max_size]
-        self.net.reshape(input_shapes={'image': shape_h})
+        self.net.reshape({'image': shape_h})
         self.exec_net_h = self.ie.load_network(network=self.net, device_name=self.device, num_requests=1)
 
         shape_v = [batch_size, channels_num, self.max_size, self.min_size]
-        self.net.reshape(input_shapes={'image': shape_v})
+        self.net.reshape({'image': shape_v})
         self.exec_net_v = self.ie.load_network(network=self.net, device_name=self.device, num_requests=1)
 
     def __call__(self, inputs):
         inputs = self.unify_inputs(inputs)
         # self.reshape(inputs=inputs)
         h, w = inputs['image'].shape[2:]
-        if h > w and ((self.max_size - h > 0) or (self.min_size - w > 0)):
-            inputs['image'] = np.pad(inputs['image'],
-                                     ((0, 0), (0, 0), (0, self.max_size - h), (0, self.min_size - w)),
-                                     mode='constant')
-            outputs = self.exec_net_v(inputs)
-        elif h <= w and ((self.min_size - h > 0) or (self.max_size - w > 0)):
-            inputs['image'] = np.pad(inputs['image'],
-                                     ((0, 0), (0, 0), (0, self.min_size - h), (0, self.max_size - w)),
-                                     mode='constant')
-            outputs = self.exec_net_h(inputs)
+        if h > w:
+            if (self.max_size - h > 0) or (self.min_size - w > 0):
+                inputs['image'] = np.pad(inputs['image'],
+                                         ((0, 0), (0, 0), (0, self.max_size - h), (0, self.min_size - w)),
+                                         mode='constant')
+            output = self.exec_net_v.infer(inputs)
+        else:
+            if (self.min_size - h > 0) or (self.max_size - w > 0):
+                inputs['image'] = np.pad(inputs['image'],
+                                         ((0, 0), (0, 0), (0, self.min_size - h), (0, self.max_size - w)),
+                                         mode='constant')
+            output = self.exec_net_h.infer(inputs)
 
         if 'detection_out' in output:
             detection_out = output['detection_out']
