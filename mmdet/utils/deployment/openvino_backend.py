@@ -120,6 +120,57 @@ class Detector(Model):
 
         return output
 
+
+class DetectorX(Model):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        batch_size = self.net.input_info['image'].input_data.shape[0]
+        assert batch_size == 1, 'Only batch 1 is supported.'
+
+        batch_size, channels_num, height, width = self.net.input_info['image'].input_data.shape
+
+        self.min_size = min(height, width)
+        self.max_size = max(height, width)
+        print(f'min_size={self.min_size}, max_size={self.max_size}')
+
+        shape_h = [batch_size, channels_num, self.min_size, self.max_size]
+        self.net.reshape(input_shapes={'image': shape_h})
+        self.exec_net_h = self.ie.load_network(network=self.net, device_name=self.device, num_requests=1)
+
+        shape_v = [batch_size, channels_num, self.max_size, self.min_size]
+        self.net.reshape(input_shapes={'image': shape_v})
+        self.exec_net_v = self.ie.load_network(network=self.net, device_name=self.device, num_requests=1)
+
+    def __call__(self, inputs):
+        inputs = self.unify_inputs(inputs)
+        # self.reshape(inputs=inputs)
+        h, w = inputs['image'].shape[2:]
+        if h > w and ((self.max_size - h > 0) or (self.min_size - w > 0)):
+            inputs['image'] = np.pad(inputs['image'],
+                                     ((0, 0), (0, 0), (0, self.max_size - h), (0, self.min_size - w)),
+                                     mode='constant')
+            outputs = self.exec_net_v(inputs)
+        elif h <= w and ((self.min_size - h > 0) or (self.max_size - w > 0)):
+            inputs['image'] = np.pad(inputs['image'],
+                                     ((0, 0), (0, 0), (0, self.min_size - h), (0, self.max_size - w)),
+                                     mode='constant')
+            outputs = self.exec_net_h(inputs)
+
+        if 'detection_out' in output:
+            detection_out = output['detection_out']
+            output['labels'] = detection_out[0, 0, :, 1].astype(np.int32)
+            output['boxes'] = detection_out[0, 0, :, 3:] * np.tile(inputs['image'].shape[:1:-1], 2)
+            output['boxes'] = np.concatenate((output['boxes'], detection_out[0, 0, :, 2:3]), axis=1)
+            del output['detection_out']
+
+        valid_detections_mask = output['labels'] >= 0
+        output['labels'] = output['labels'][valid_detections_mask]
+        output['boxes'] = output['boxes'][valid_detections_mask]
+        if 'masks' in output:
+            output['masks'] = output['masks'][valid_detections_mask]
+
+        return output
+
 class ModelOpenVINO:
 
     def __init__(self,
