@@ -166,20 +166,21 @@ def main(args):
     prog_bar = mmcv.ProgressBar(len(dataset))
     for i, data in enumerate(data_loader):
         im_data = data['img'][0].cpu().numpy()
-        try:
+        # try:
+        if True:
             result = model(im_data)
             result = postprocess(
                 result,
                 data['img_metas'][0].data[0],
                 num_classes=classes_num,
                 rescale=not args.show)
-        except Exception as ex:
-            print(f'\nException raised while processing item {i}:')
-            print(ex)
-            with_mask = hasattr(model.pt_model, 'with_mask') and model.pt_model.with_mask
-            result = empty_result(
-                num_classes=classes_num,
-                with_mask=with_mask)
+        # except Exception as ex:
+        #     print(f'\nException raised while processing item {i}:')
+        #    print(ex)
+        #    with_mask = hasattr(model.pt_model, 'with_mask') and model.pt_model.with_mask
+        #    result = empty_result(
+        #        num_classes=classes_num,
+        #        with_mask=with_mask)
         results.append(result)
 
         if args.show:

@@ -138,7 +138,8 @@ def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, 
 
     mean_values = normalize['mean']
     scale_values = normalize['std']
-    command_line = f'mo.py --input_model="{onnx_model_path}" ' \
+    mo = 'python /programs/openvino/model-optimizer/mo.py'
+    command_line = f'{mo} --input_model="{onnx_model_path}" ' \
                    f'--mean_values="{mean_values}" ' \
                    f'--scale_values="{scale_values}" ' \
                    f'--output_dir="{output_dir_path}" ' \
@@ -153,7 +154,7 @@ def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, 
         command_line += ' --reverse_input_channels'
 
     try:
-        run('mo.py -h', stdout=DEVNULL, stderr=DEVNULL, shell=True, check=True)
+        run(f'{mo} -h', stdout=DEVNULL, stderr=DEVNULL, shell=True, check=True)
     except CalledProcessError as ex:
         print('OpenVINO Model Optimizer not found, please source '
               'openvino/bin/setupvars.sh before running this script.')

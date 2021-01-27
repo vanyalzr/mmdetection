@@ -60,7 +60,7 @@ class Model:
         return inputs_dict
 
     def reshape(self, inputs=None, input_shapes=None):
-        assert inputs is None != input_shapes is None
+        assert (inputs is None) != (input_shapes is None)
         if input_shapes is None:
             input_shapes = {name: data.shape for name, data in inputs.items()}
         reshape_needed = False
@@ -71,6 +71,7 @@ class Model:
                 break
         if reshape_needed:
             self.logger.info(f'reshape net to {input_shapes}')
+            print(f'reshape net to {input_shapes}')
             self.net.reshape(input_shapes)
             self.exec_net = self.ie.load_network(network=self.net, device_name=self.device, num_requests=1)
 
@@ -83,6 +84,7 @@ class Model:
     def __call__(self, inputs):
         inputs = self.unify_inputs(inputs)
         inputs = self.preprocess(inputs)
+        self.reshape(inputs=inputs)
         outputs = self.exec_net.infer(inputs)
         outputs = self.postprocess(outputs)
         return outputs
