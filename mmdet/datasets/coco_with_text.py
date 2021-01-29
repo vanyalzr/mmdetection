@@ -1,16 +1,29 @@
 import collections
 import copy
 import logging
+import os
 import string
 
+import editdistance
 import numpy as np
 from mmcv.utils import print_log
 from pycocotools.cocoeval import COCOeval
+from tqdm import tqdm
 
 from mmdet.core import text_eval
 from .builder import DATASETS
 from .coco import CocoDataset, ConcatenatedCocoDataset, get_polygon
 
+
+def find_in_lexicon(sequence, lexicon, lexicon_mapping):
+    sequence = sequence.upper()
+    distances = [editdistance.eval(sequence, word.upper()) for word in lexicon]
+    argmin = np.argmin(distances)
+    word = lexicon[argmin]
+    distance = distances[argmin]
+    if lexicon_mapping:
+        word = lexicon_mapping[word]
+    return word, distance
 
 @DATASETS.register_module()
 class CocoWithTextDataset(CocoDataset):
@@ -138,7 +151,7 @@ class CocoWithTextDataset(CocoDataset):
 
         metrics = list(metric) if isinstance(metric, list) else [metric]
 
-        computed_metrics = ['word_spotting']
+        computed_metrics = ['word_spotting_bbox', 'word_spotting_segm', 'e2e_recognition_bbox', 'e2e_recognition_segm']
         removed_metrics = []
 
         for computed_metric in computed_metrics:
@@ -156,7 +169,7 @@ class CocoWithTextDataset(CocoDataset):
                 msg = '\n' + msg
             print_log(msg, logger=logger)
 
-            metric_type = 'bbox' if metric in ['word_spotting'] else metric
+            metric_type = 'bbox' if metric in computed_metrics else metric
             if metric_type not in result_files:
                 raise KeyError(f'{metric_type} is not in results')
             try:
@@ -168,30 +181,59 @@ class CocoWithTextDataset(CocoDataset):
                     level=logging.ERROR)
                 break
 
-            iou_type = 'bbox' if metric in {'word_spotting'} else metric
+            iou_type = 'bbox' if metric in computed_metrics else metric
             cocoEval = COCOeval(cocoGt, cocoDt, iou_type)
             cocoEval.params.catIds = self.cat_ids
             cocoEval.params.imgIds = self.img_ids
-            if metric in ['word_spotting']:
+            if metric in computed_metrics:
+
+                lexicon_path = '/lexicons/ic15/GenericVocabulary_new.txt'
+                with open(lexicon_path) as f:
+                    lexicon = [line.strip() for line in f]
+
+                lexicon_pairs_path = '/lexicons/ic15/GenericVocabulary_pair_list.txt'
+                with open(lexicon_pairs_path) as f:
+                    lexicon_pairs = [line.strip().split(' ') for line in f]
+                    lexicon_pairs = {pair[0].upper(): ' '.join(pair[1:]) for pair in lexicon_pairs}
+
+                use_lexicon = True
+
+                import tempfile
+                tempdir = tempfile.mkdtemp()
                 predictions = []
-                for res in results:
+                for i, res in tqdm(enumerate(results)):
+                    image_basename = os.path.basename(self.data_infos[i]['filename'])
+
                     boxes = res[0][0]
                     segms = res[1][0]
-                    texts = res[2]
+                    texts, text_confidences = res[2]
 
                     per_image_predictions = []
+                    
+                    suffix = 'res_' if metric.endswith('bbox') else 'gt_'
 
-                    for bbox, segm, text in zip(boxes, segms, texts):
-                        if text or metric == 'f1':
-                            text = text.upper()
-                            contour = get_polygon(segm, bbox)
-                            per_image_predictions.append({
-                                'segmentation': contour,
-                                'score': 1.0,
-                                'text': {
-                                    'transcription': text
-                                }
-                            })
+                    dest = suffix + image_basename[:-3] + 'txt'
+                    dest = f'{tempdir}/{dest}'
+                    with open(dest, 'w') as f: 
+                        for bbox, segm, text, text_conf in zip(boxes, segms, texts, text_confidences):
+                            if text:
+                                text = text.upper()
+
+                                if lexicon and use_lexicon:
+                                    text, _ = find_in_lexicon(text, lexicon, lexicon_pairs)
+
+                                contour, conf = get_polygon(segm, bbox, metric.endswith('bbox'))
+                                per_image_predictions.append({
+                                    'segmentation': [int(x) for x in contour],
+                                    'score': conf,
+                                    'text': {
+                                        'transcription': text,
+                                        'score' : float(text_conf)
+                                    }
+                                })
+
+                                s = ','.join([str(int(x)) for x in contour]) + ',' + text
+                                f.write(s + '\n')
 
                     predictions.append(per_image_predictions)
 
@@ -199,12 +241,41 @@ class CocoWithTextDataset(CocoDataset):
                 recall, precision, hmean, _ = text_eval(
                     predictions, gt_annotations, score_thr,
                     show_recall_graph=False,
-                    use_transcriptions=True)
-                print('Text detection recall={:.4f} precision={:.4f} hmean={:.4f}'.
-                      format(recall, precision, hmean))
+                    use_transcriptions=True, 
+                    word_spotting=metric.startswith('word_spotting'))
+                print(f'Text detection recall={recall} precision={precision} hmean={hmean}')
                 eval_results[metric + '/hmean'] = float(f'{hmean:.3f}')
                 eval_results[metric + '/precision'] = float(f'{precision:.3f}')
                 eval_results[metric + '/recall'] = float(f'{recall:.3f}')
+
+                os.system(f'cd {tempdir}; zip -q pr.zip *')
+                print(f'{tempdir}/pr.zip')
+
+                # all_predictions = copy.deepcopy(predictions)
+                # best_hmean = -1
+                # best_det_thr = None
+                # best_rec_thr = None
+                # for det_thr in np.arange(0.05, 1.0, 0.05):
+                #     for rec_thr in np.arange(0.05, 1.0, 0.05):
+                #         predictions = []
+                #         for per_image_predictions in all_predictions:
+                #             filtered_per_image_predictions = [p for p in per_image_predictions if p['score'] >= det_thr and p['text']['score'] >= rec_thr]
+                #             predictions.append(filtered_per_image_predictions)
+
+                #         gt_annotations = cocoEval.cocoGt.imgToAnns
+                #         recall, precision, hmean, _ = text_eval(
+                #             predictions, gt_annotations, score_thr,
+                #             show_recall_graph=False,
+                #             use_transcriptions=True, 
+                #             word_spotting=metric.startswith('word_spotting'))
+                #         print(f'det_thr={det_thr}, rec_thr={rec_thr}')
+                #         print(f'Text detection recall={recall} precision={precision} hmean={hmean}')
+                #         if hmean > best_hmean:
+                #             best_hmean = hmean
+                #             best_det_thr = det_thr
+                #             best_rec_thr = rec_thr
+                #         print(f'###### best_hmean={best_hmean} det_thr={best_det_thr}, rec_thr={best_rec_thr}')
+
 
         if tmp_dir is not None:
             tmp_dir.cleanup()
