@@ -144,6 +144,7 @@ def point_sample(input, points, align_corners=False, **kwargs):
     if points.dim() == 3:
         add_dim = True
         points = points.unsqueeze(2)
+    #output = torch.ones((input.shape[0], input.shape[1], points.shape[1], points.shape[2]), device=input.device)
     output = F.grid_sample(
         input, denormalize(points), align_corners=align_corners, **kwargs)
     if add_dim:
@@ -153,7 +154,7 @@ def point_sample(input, points, align_corners=False, **kwargs):
 
 class SimpleRoIAlign(nn.Module):
 
-    def __init__(self, out_size, spatial_scale, aligned=True):
+    def __init__(self, output_size, spatial_scale, aligned=True):
         """Simple RoI align in PointRend, faster than standard RoIAlign.
         Args:
             out_size (tuple[int]): h, w
@@ -164,7 +165,7 @@ class SimpleRoIAlign(nn.Module):
         """
 
         super(SimpleRoIAlign, self).__init__()
-        self.out_size = _pair(out_size)
+        self.out_size = _pair(output_size)
         self.spatial_scale = float(spatial_scale)
         # to be consistent with other RoI ops
         self.use_torchvision = False

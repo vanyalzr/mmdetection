@@ -215,8 +215,10 @@ def main():
     cfg.seed = args.seed
     meta['seed'] = args.seed
 
+    train_cfg = cfg.get('train_cfg')
+    test_cfg = cfg.get('test_cfg')
     model = build_detector(
-        cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
+        cfg.model, train_cfg=train_cfg, test_cfg=test_cfg)
 
     datasets = [build_dataset(cfg.data.train)]
 

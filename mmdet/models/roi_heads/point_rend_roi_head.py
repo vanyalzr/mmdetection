@@ -8,6 +8,7 @@ from mmdet.core import bbox2roi, bbox_mapping, merge_aug_masks
 from .. import builder
 from ..builder import HEADS
 from .standard_roi_head import StandardRoIHead
+from mmdet.core.utils.misc import dummy_pad
 
 
 @HEADS.register_module()
@@ -82,7 +83,8 @@ class PointRendRoIHead(StandardRoIHead):
             for batch_ind in range(num_imgs):
                 # unravel batch dim
                 feat = feats[batch_ind].unsqueeze(0)
-                inds = (rois[:, 0].long() == batch_ind)
+                #inds = torch.empty((rois.shape[0]), dtype=torch.bool, device=rois.device).fill_(True)
+                inds = rois[:, 0].long() == batch_ind
                 if inds.any():
                     rel_img_points = rel_roi_point_to_rel_img_point(
                         rois[inds], rel_roi_points[inds], feat.shape[2:],
@@ -138,8 +140,17 @@ class PointRendRoIHead(StandardRoIHead):
                          det_labels,
                          rescale=False):
         """Obtain mask prediction without augmentation."""
+        det_bboxes, det_labels = [det_bboxes], [det_labels]
         ori_shapes = tuple(meta['ori_shape'] for meta in img_metas)
         scale_factors = tuple(meta['scale_factor'] for meta in img_metas)
+        if torch.onnx.is_in_onnx_export() and det_bboxes[0].shape[0] == 0:
+            # If there are no detection there is nothing to do for a mask head.
+            # But during ONNX export we should run mask head
+            # for it to appear in the graph.
+            # So add one zero / dummy ROI that will be mapped
+            # to an Identity op in the graph.
+            det_bboxes[0] = dummy_pad(det_bboxes[0], (0, 0, 0, 1))
+            det_labels[0] = dummy_pad(det_labels[0], (0, 1))
         num_imgs = len(det_bboxes)
         if all(det_bbox.shape[0] == 0 for det_bbox in det_bboxes):
             segm_results = [[[] for _ in range(self.mask_head.num_classes)]
@@ -161,6 +172,8 @@ class PointRendRoIHead(StandardRoIHead):
             mask_results = self._mask_forward(x, mask_rois)
             # split batch mask prediction back to each image
             mask_pred = mask_results['mask_pred']
+            #mask_preds = [mask_pred]
+            #mask_rois = [mask_rois]
             num_mask_roi_per_img = [len(det_bbox) for det_bbox in det_bboxes]
             mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
             mask_rois = mask_rois.split(num_mask_roi_per_img, 0)

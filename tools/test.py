@@ -114,7 +114,7 @@ def main():
         shuffle=False)
 
     # build the model and load checkpoint
-    model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
+    model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.model.test_cfg)
     fp16_cfg = cfg.get('fp16', None)
     if fp16_cfg is not None:
         wrap_fp16_model(model)
@@ -154,7 +154,7 @@ def main():
         if args.format_only:
             dataset.format_results(outputs, **kwargs)
         if args.eval:
-            dataset.evaluate(outputs, args.eval, test_cfg=cfg.test_cfg, **kwargs)
+            dataset.evaluate(outputs, args.eval, test_cfg=cfg.model.test_cfg, **kwargs)
 
 
 if __name__ == '__main__':

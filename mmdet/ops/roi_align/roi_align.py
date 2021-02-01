@@ -107,9 +107,9 @@ roi_align = RoIAlignFunction.apply
 class RoIAlign(nn.Module):
 
     def __init__(self,
-                 out_size,
+                 output_size,
                  spatial_scale,
-                 sample_num=0,
+                 sampling_ratio=0,
                  use_torchvision=False,
                  aligned=True):
         """
@@ -146,10 +146,10 @@ class RoIAlign(nn.Module):
             performance if ROIAlign is used together with conv layers.
         """
         super(RoIAlign, self).__init__()
-        self.out_size = _pair(out_size)
+        self.out_size = _pair(output_size)
         self.spatial_scale = float(spatial_scale)
         self.aligned = aligned
-        self.sample_num = int(sample_num)
+        self.sample_num = int(sampling_ratio)
         self.use_torchvision = use_torchvision
         assert not (use_torchvision and
                     aligned), 'Torchvision does not support aligned RoIAlgin'
