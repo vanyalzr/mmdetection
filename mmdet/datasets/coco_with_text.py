@@ -13,14 +13,22 @@ from tqdm import tqdm
 from mmdet.core import text_eval
 from .builder import DATASETS
 from .coco import CocoDataset, ConcatenatedCocoDataset, get_polygon
+from .weighted_editdistance import weighted_edit_distance
 
 
-def find_in_lexicon(sequence, lexicon, lexicon_mapping):
+def find_in_lexicon(sequence, lexicon, lexicon_mapping, char_distrib):
     sequence = sequence.upper()
     distances = [editdistance.eval(sequence, word.upper()) for word in lexicon]
     argmin = np.argmin(distances)
-    word = lexicon[argmin]
     distance = distances[argmin]
+    if char_distrib is not None:
+        small_lexicon = [word for i, word in enumerate(lexicon) if distances[i] <= distance + 2]
+        distances = [weighted_edit_distance(sequence, word.upper(), char_distrib) for word in small_lexicon]
+        argmin = np.argmin(distances)
+        distance = distances[argmin]
+        word = small_lexicon[argmin]
+    else:
+        word = lexicon[argmin]
     if lexicon_mapping:
         word = lexicon_mapping[word]
     return word, distance
@@ -206,7 +214,7 @@ class CocoWithTextDataset(CocoDataset):
 
                     boxes = res[0][0]
                     segms = res[1][0]
-                    texts, text_confidences = res[2]
+                    texts, text_confidences, character_distributions = res[2]
 
                     per_image_predictions = []
                     
@@ -215,12 +223,12 @@ class CocoWithTextDataset(CocoDataset):
                     dest = suffix + image_basename[:-3] + 'txt'
                     dest = f'{tempdir}/{dest}'
                     with open(dest, 'w') as f: 
-                        for bbox, segm, text, text_conf in zip(boxes, segms, texts, text_confidences):
+                        for bbox, segm, text, text_conf, char_distrib in zip(boxes, segms, texts, text_confidences, character_distributions):
                             if text:
                                 text = text.upper()
 
                                 if lexicon and use_lexicon:
-                                    text, _ = find_in_lexicon(text, lexicon, lexicon_pairs)
+                                    text, _ = find_in_lexicon(text, lexicon, lexicon_pairs, None)
 
                                 contour, conf = get_polygon(segm, bbox, metric.endswith('bbox'))
                                 per_image_predictions.append({

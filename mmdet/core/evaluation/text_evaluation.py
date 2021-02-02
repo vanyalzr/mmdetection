@@ -199,7 +199,7 @@ def parse_gt_objects(gt_annotation, use_transcription, word_spotting):
     return gt_polygons_list, gt_dont_care_polygon_nums, gt_transcriptions
 
 
-def parse_pr_objects(pr_annotation, conf_thr, use_transcription):
+def parse_pr_objects(pr_annotation, conf_thr, use_transcription, word_spotting):
     """ Parses predicted objects from annotation. """
 
     pr_polygons_list = []
@@ -210,7 +210,10 @@ def parse_pr_objects(pr_annotation, conf_thr, use_transcription):
         pr_polygons_list.append(polygon)
         pr_confidences_list.append(pr_object['score'])
         if use_transcription:
-            pr_transcriptions.append(pr_object['text']['transcription'])
+            transcription = pr_object['text']['transcription']
+            # if word_spotting:
+            #     transcription = strip(transcription)
+            pr_transcriptions.append(transcription)
 
     # Filter out detections with low confidence.
     filter_mask = [(el > conf_thr) for el in pr_confidences_list]
@@ -327,7 +330,7 @@ def text_eval(pr_annotations, gt_annotations, conf_thr,
         gt_polygons_list, gt_dont_care_polygon_nums, gt_transcriptions = parse_gt_objects(
             gt_annotations[frame_id], use_transcriptions, word_spotting)
         pr_polygons_list, pr_confidences_list, pr_transcriptions = parse_pr_objects(
-            pr_annotations[frame_id], conf_thr, use_transcriptions)
+            pr_annotations[frame_id], conf_thr, use_transcriptions, word_spotting)
 
         pr_dont_care_polygon_nums = match_dont_care_objects(
             gt_polygons_list, gt_dont_care_polygon_nums, pr_polygons_list)

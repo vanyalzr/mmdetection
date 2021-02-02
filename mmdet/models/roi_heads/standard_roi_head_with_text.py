@@ -180,6 +180,8 @@ class StandardRoIHeadWithText(StandardRoIHead):
             confidences = torch.empty([0, 0, 0],
                                     dtype=det_bboxes.dtype,
                                     device=det_bboxes.device)
+
+            distributions = []
         else:
             # if det_bboxes is rescaled to the original image size, we need to
             # rescale it back to the testing scale to obtain RoIs.
@@ -196,6 +198,7 @@ class StandardRoIHeadWithText(StandardRoIHead):
             text_results = torch.nn.functional.softmax(text_results, dim=-1)
             confidences = []
             decoded_texts = []
+            distributions = []
             for text in text_results:
                 predicted_confidences, encoded = text.topk(1)
                 predicted_confidences = predicted_confidences.cpu().numpy()
@@ -208,9 +211,12 @@ class StandardRoIHeadWithText(StandardRoIHead):
                         break
                     decoded += self.alphabet[l]
                 confidences.append(confidence)
+                distribution = np.transpose(text.cpu().numpy())[2:, :len(decoded) + 1]
+                distributions.append(distribution)
+               
                 decoded_texts.append(decoded if confidence >= self.text_thr else '')
 
-        return decoded_texts, confidences
+        return decoded_texts, confidences, distributions
 
     def simple_test(self,
                     x,
