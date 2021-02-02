@@ -59,7 +59,7 @@ class PointRendRoIHead(StandardRoIHead):
 
         fine_grained_point_feats = self._get_fine_grained_point_feats(
             x, rois, rel_roi_points, img_metas)
-        coarse_point_feats = point_sample(mask_pred, rel_roi_points)
+        coarse_point_feats = point_sample(mask_pred, rel_roi_points, onnx_export=torch.onnx.is_in_onnx_export())
         mask_point_pred = self.point_head(fine_grained_point_feats,
                                           coarse_point_feats)
         mask_point_target = self.point_head.get_targets(
@@ -84,10 +84,10 @@ class PointRendRoIHead(StandardRoIHead):
                 # unravel batch dim
                 feat = feats[batch_ind].unsqueeze(0)
                 #inds = torch.empty((rois.shape[0]), dtype=torch.bool, device=rois.device).fill_(True)
-                inds = rois[:, 0].long() == batch_ind
-                if inds.any():
+                #inds = (rois[:, 0].long() == batch_ind)
+                if num_imgs:#inds.any():
                     rel_img_points = rel_roi_point_to_rel_img_point(
-                        rois[inds], rel_roi_points[inds], feat.shape[2:],
+                        rois, rel_roi_points, feat.shape[2:],
                         spatial_scale).unsqueeze(0)
                     point_feat = point_sample(feat, rel_img_points)
                     point_feat = point_feat.squeeze(0).transpose(0, 1)
@@ -172,11 +172,13 @@ class PointRendRoIHead(StandardRoIHead):
             mask_results = self._mask_forward(x, mask_rois)
             # split batch mask prediction back to each image
             mask_pred = mask_results['mask_pred']
-            #mask_preds = [mask_pred]
-            #mask_rois = [mask_rois]
-            num_mask_roi_per_img = [len(det_bbox) for det_bbox in det_bboxes]
-            mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
-            mask_rois = mask_rois.split(num_mask_roi_per_img, 0)
+            if torch.onnx.is_in_onnx_export():
+                mask_preds = [mask_pred]
+                mask_rois = [mask_rois]
+            else:
+                num_mask_roi_per_img = [len(det_bbox) for det_bbox in det_bboxes]
+                mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
+                mask_rois = mask_rois.split(num_mask_roi_per_img, 0)
 
             # apply mask post-processing to each image individually
             segm_results = []

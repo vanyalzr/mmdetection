@@ -65,14 +65,27 @@ def rel_roi_point_to_abs_img_point(rois, rel_roi_points):
         assert rel_roi_points.size(2) == 2
         # remove batch idx
         if rois.size(1) == 5:
-            rois = rois[:, 1:]
+            #rois_ = torch.empty((rois.shape[0], rois.shape[1] - 1), dtype=rois.dtype, device=rois.device)
+            #for i in range(rois.shape[0]):
+            #    rois_[i] = rois[i, 1:]
+            rois_ = rois[:, 1:]
         abs_img_points = rel_roi_points.clone()
         abs_img_points[:, :, 0] = abs_img_points[:, :, 0] * (
-            rois[:, None, 2] - rois[:, None, 0])
+            rois_[:, None, 2] - rois_[:, None, 0])
         abs_img_points[:, :, 1] = abs_img_points[:, :, 1] * (
-            rois[:, None, 3] - rois[:, None, 1])
-        abs_img_points[:, :, 0] += rois[:, None, 0]
-        abs_img_points[:, :, 1] += rois[:, None, 1]
+            rois_[:, None, 3] - rois_[:, None, 1])
+        abs_img_points[:, :, 0] += rois_[:, None, 0]
+        abs_img_points[:, :, 1] += rois_[:, None, 1]
+        #for i in range(rois_.shape[0]):
+        #    abs_img_points[i, :, 0] = abs_img_points[i, :, 0] * (
+        #        rois_[i, None, 2] - rois_[i, None, 0])
+        #for i in range(rois_.shape[0]):
+        #    abs_img_points[i, :, 1] = abs_img_points[i, :, 1] * (
+        #        rois_[i, None, 3] - rois_[i, None, 1])
+        #for i in range(rois_.shape[0]):
+        #    abs_img_points[i, :, 0] += rois_[i, None, 0]
+        #for i in range(rois_.shape[0]):
+        #    abs_img_points[i, :, 1] += rois_[i, None, 1]
     return abs_img_points
 
 
@@ -126,7 +139,7 @@ def rel_roi_point_to_rel_img_point(rois,
     return rel_img_point
 
 
-def point_sample(input, points, align_corners=False, **kwargs):
+def point_sample(input, points, align_corners=False, onnx_export=False, **kwargs):
     """A wrapper around :function:`grid_sample` to support 3D point_coords
     tensors Unlike :function:`torch.nn.functional.grid_sample` it assumes
     point_coords to lie inside [0, 1] x [0, 1] square.
@@ -144,9 +157,11 @@ def point_sample(input, points, align_corners=False, **kwargs):
     if points.dim() == 3:
         add_dim = True
         points = points.unsqueeze(2)
-    #output = torch.ones((input.shape[0], input.shape[1], points.shape[1], points.shape[2]), device=input.device)
-    output = F.grid_sample(
-        input, denormalize(points), align_corners=align_corners, **kwargs)
+    #if onnx_export:
+    output = torch.ones((input.shape[0], input.shape[1], points.shape[1], points.shape[2]), device=input.device)
+    #else:
+    #    output = F.grid_sample(
+    #        input, denormalize(points), align_corners=align_corners, **kwargs)
     if add_dim:
         output = output.squeeze(3)
     return output
@@ -188,7 +203,7 @@ class SimpleRoIAlign(nn.Module):
                     rois[inds], rel_roi_points[inds], feat.shape[2:],
                     self.spatial_scale).unsqueeze(0)
                 point_feat = point_sample(
-                    feat, rel_img_points, align_corners=not self.aligned)
+                    feat, rel_img_points, align_corners=not self.aligned, onnx_export=torch.onnx.is_in_onnx_export())
                 point_feat = point_feat.squeeze(0).transpose(0, 1)
                 point_feats.append(point_feat)
 
