@@ -225,10 +225,10 @@ class SimpleRoIAlign(nn.Module):
         for batch_ind in range(num_imgs):
             # unravel batch dim
             feat = features[batch_ind].unsqueeze(0)
-            #inds = (rois[:, 0].long() == batch_ind)
-            if num_imgs:#inds.any():
+            inds = (rois[:, 0].long() == batch_ind)
+            if inds.any():
                 rel_img_points = rel_roi_point_to_rel_img_point(
-                    rois, rel_roi_points, feat.shape[2:],
+                    rois[inds], rel_roi_points[inds], feat.shape[2:],
                     self.spatial_scale).unsqueeze(0)
                 point_feat = point_sample(
                     feat, rel_img_points, align_corners=not self.aligned)

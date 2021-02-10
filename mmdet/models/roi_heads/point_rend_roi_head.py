@@ -59,7 +59,7 @@ class PointRendRoIHead(StandardRoIHead):
 
         fine_grained_point_feats = self._get_fine_grained_point_feats(
             x, rois, rel_roi_points, img_metas)
-        coarse_point_feats = point_sample(mask_pred, rel_roi_points, onnx_export=torch.onnx.is_in_onnx_export())
+        coarse_point_feats = point_sample(mask_pred, rel_roi_points)
         mask_point_pred = self.point_head(fine_grained_point_feats,
                                           coarse_point_feats)
         mask_point_target = self.point_head.get_targets(
@@ -83,10 +83,10 @@ class PointRendRoIHead(StandardRoIHead):
             for batch_ind in range(num_imgs):
                 # unravel batch dim
                 feat = feats[batch_ind].unsqueeze(0)
-                #inds = (rois[:, 0].long() == batch_ind)
+                inds = (rois[:, 0].long() == batch_ind)
                 if num_imgs:#inds.any():
                     rel_img_points = rel_roi_point_to_rel_img_point(
-                        rois, rel_roi_points, feat.shape[2:],
+                        rois[inds], rel_roi_points[inds], feat.shape[2:],
                         spatial_scale).unsqueeze(0)
                     point_feat = point_sample(feat, rel_img_points)
                     point_feat = point_feat.squeeze(0).transpose(0, 1)
@@ -188,7 +188,7 @@ class PointRendRoIHead(StandardRoIHead):
                 else:
                     x_i = [xx[[i]] for xx in x]
                     mask_rois_i = mask_rois[i]
-                    #mask_rois_i[:, 0] = 0  # TODO: remove this hack
+                    mask_rois_i[:, 0] = 0  # TODO: remove this hack
                     mask_pred_i = self._mask_point_forward_test(
                         x_i, mask_rois_i, det_labels[i], mask_preds[i],
                         [img_metas])
