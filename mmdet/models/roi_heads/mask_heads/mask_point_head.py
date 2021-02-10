@@ -285,16 +285,20 @@ class MaskPointHead(nn.Module):
         num_points = cfg.subdivision_num_points
         uncertainty_map = self._get_uncertainty(mask_pred, pred_label)
         num_rois, _, mask_height, mask_width = uncertainty_map.shape
-        h_step = 1.0 / mask_height
-        w_step = 1.0 / mask_width
+        if isinstance(mask_height, torch.Tensor):
+            h_step = torch.tensor(1.0 / mask_height.item(), dtype=torch.float32)
+            w_step = torch.tensor(1.0 / mask_width.item(), dtype=torch.float32)
+        else:
+            h_step = 1.0 / mask_height
+            w_step = 1.0 / mask_width
 
         uncertainty_map = uncertainty_map.view(num_rois,
                                                mask_height * mask_width)
         num_points = min(mask_height * mask_width, num_points)
         point_indices = uncertainty_map.topk(num_points, dim=1)[1]
         point_coords = uncertainty_map.new_zeros(num_rois, num_points, 2)
-        point_coords[:, :, 0] = w_step / 2.0 + (point_indices %
+        point_coords[:, :, 0] = w_step / 2.0 + (point_indices.float() %
                                                 mask_width).float() * w_step
-        point_coords[:, :, 1] = h_step / 2.0 + (point_indices //
+        point_coords[:, :, 1] = h_step / 2.0 + (point_indices.float() //
                                                 mask_width).float() * h_step
         return point_indices, point_coords

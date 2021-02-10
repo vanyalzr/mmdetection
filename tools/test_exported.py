@@ -187,7 +187,7 @@ def main(args):
         print(f'\nwriting results to {args.out}')
         mmcv.dump(results, args.out)
     if args.eval:
-        dataset.evaluate(results, args.eval, test_cfg=cfg.test_cfg)
+        dataset.evaluate(results, args.eval, test_cfg=cfg.model.test_cfg)
 
 
 def parse_args():

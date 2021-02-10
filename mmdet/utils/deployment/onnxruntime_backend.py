@@ -30,7 +30,7 @@ class ModelONNXRuntime(object):
         self.pt_model = None
         if cfg is not None:
             self.pt_model = build_detector(
-                cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
+                cfg.model, train_cfg=None, test_cfg=cfg.model.test_cfg)
             if classes is not None:
                 self.pt_model.CLASSES = classes
 

@@ -83,7 +83,6 @@ class PointRendRoIHead(StandardRoIHead):
             for batch_ind in range(num_imgs):
                 # unravel batch dim
                 feat = feats[batch_ind].unsqueeze(0)
-                #inds = torch.empty((rois.shape[0]), dtype=torch.bool, device=rois.device).fill_(True)
                 #inds = (rois[:, 0].long() == batch_ind)
                 if num_imgs:#inds.any():
                     rel_img_points = rel_roi_point_to_rel_img_point(
@@ -189,7 +188,7 @@ class PointRendRoIHead(StandardRoIHead):
                 else:
                     x_i = [xx[[i]] for xx in x]
                     mask_rois_i = mask_rois[i]
-                    mask_rois_i[:, 0] = 0  # TODO: remove this hack
+                    #mask_rois_i[:, 0] = 0  # TODO: remove this hack
                     mask_pred_i = self._mask_point_forward_test(
                         x_i, mask_rois_i, det_labels[i], mask_preds[i],
                         [img_metas])

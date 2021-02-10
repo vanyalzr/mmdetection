@@ -200,7 +200,8 @@ def stub_roi_feature_extractor(model, extractor_name):
 def get_fake_input(cfg, orig_img_shape=(128, 128, 3), device='cuda'):
     test_pipeline = [LoadImage()] + cfg.data.test.pipeline[1:]
     test_pipeline = Compose(test_pipeline)
-    data = dict(img=np.zeros(orig_img_shape, dtype=np.uint8))
+    image = 'data/coco/val2017/000000397133.jpg'
+    data = dict(img=np.zeros(orig_img_shape, dtype=np.uint8)) #dict(img=image)
     data = test_pipeline(data)
     data = scatter(collate([data], samples_per_gpu=1), [device])[0]
     return data

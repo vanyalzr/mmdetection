@@ -6,6 +6,48 @@ import torch.nn.functional as F
 from torch.nn.modules.utils import _pair
 
 
+def bilinear_grid_sample(im, grid, align_corners=False):
+    n, c, h, w = im.shape
+    gn, gh, gw, _ = grid.shape
+    assert n == gn
+
+    x = grid[:, :, :, 0]
+    y = grid[:, :, :, 1]
+
+    if align_corners:
+        x = (((x + 1) / 2) * (w - 1))
+        y = (((y + 1) / 2) * (h - 1))
+    else:
+        x = (((x + 1) * w - 1) / 2)
+        y = (((y + 1) * h - 1) / 2)
+
+    x = x.view(n, -1)
+    y = y.view(n, -1)
+
+    x0 = torch.floor(x).long()
+    y0 = torch.floor(y).long()
+    x1 = x0 + 1
+    y1 = y0 + 1
+
+    wa = ((x1 - x) * (y1 - y)).unsqueeze(1)
+    wb = ((x1 - x) * (y - y0)).unsqueeze(1)
+    wc = ((x - x0) * (y1 - y)).unsqueeze(1)
+    wd = ((x - x0) * (y - y0)).unsqueeze(1)
+
+    # Apply default for grid_sample function zero padding
+    im_padded = F.pad(im, pad=(1, 1, 1, 1), mode='constant', value=0)
+    # save points positions after padding
+    x0, x1, y0, y1 = x0 + 1, x1 + 1, y0 + 1, y1 + 1
+
+    # TODO: get rid of loops
+    Ia = torch.stack([im_padded[i, :, y0[i], x0[i]] for i in range(n)])
+    Ib = torch.stack([im_padded[i, :, y1[i], x0[i]] for i in range(n)])
+    Ic = torch.stack([im_padded[i, :, y0[i], x1[i]] for i in range(n)])
+    Id = torch.stack([im_padded[i, :, y1[i], x1[i]] for i in range(n)])
+
+    return (Ia * wa + Ib * wb + Ic * wc + Id * wd).reshape(n, c, gh, gw)
+
+
 def normalize(grid):
     """Normalize input grid from [-1, 1] to [0, 1]
     Args:
@@ -65,27 +107,14 @@ def rel_roi_point_to_abs_img_point(rois, rel_roi_points):
         assert rel_roi_points.size(2) == 2
         # remove batch idx
         if rois.size(1) == 5:
-            #rois_ = torch.empty((rois.shape[0], rois.shape[1] - 1), dtype=rois.dtype, device=rois.device)
-            #for i in range(rois.shape[0]):
-            #    rois_[i] = rois[i, 1:]
-            rois_ = rois[:, 1:]
+            rois = rois[:, 1:]
         abs_img_points = rel_roi_points.clone()
         abs_img_points[:, :, 0] = abs_img_points[:, :, 0] * (
-            rois_[:, None, 2] - rois_[:, None, 0])
+            rois[:, None, 2] - rois[:, None, 0])
         abs_img_points[:, :, 1] = abs_img_points[:, :, 1] * (
-            rois_[:, None, 3] - rois_[:, None, 1])
-        abs_img_points[:, :, 0] += rois_[:, None, 0]
-        abs_img_points[:, :, 1] += rois_[:, None, 1]
-        #for i in range(rois_.shape[0]):
-        #    abs_img_points[i, :, 0] = abs_img_points[i, :, 0] * (
-        #        rois_[i, None, 2] - rois_[i, None, 0])
-        #for i in range(rois_.shape[0]):
-        #    abs_img_points[i, :, 1] = abs_img_points[i, :, 1] * (
-        #        rois_[i, None, 3] - rois_[i, None, 1])
-        #for i in range(rois_.shape[0]):
-        #    abs_img_points[i, :, 0] += rois_[i, None, 0]
-        #for i in range(rois_.shape[0]):
-        #    abs_img_points[i, :, 1] += rois_[i, None, 1]
+            rois[:, None, 3] - rois[:, None, 1])
+        abs_img_points[:, :, 0] += rois[:, None, 0]
+        abs_img_points[:, :, 1] += rois[:, None, 1]
     return abs_img_points
 
 
@@ -139,7 +168,7 @@ def rel_roi_point_to_rel_img_point(rois,
     return rel_img_point
 
 
-def point_sample(input, points, align_corners=False, onnx_export=False, **kwargs):
+def point_sample(input, points, align_corners=False, **kwargs):
     """A wrapper around :function:`grid_sample` to support 3D point_coords
     tensors Unlike :function:`torch.nn.functional.grid_sample` it assumes
     point_coords to lie inside [0, 1] x [0, 1] square.
@@ -157,11 +186,8 @@ def point_sample(input, points, align_corners=False, onnx_export=False, **kwargs
     if points.dim() == 3:
         add_dim = True
         points = points.unsqueeze(2)
-    #if onnx_export:
-    output = torch.ones((input.shape[0], input.shape[1], points.shape[1], points.shape[2]), device=input.device)
-    #else:
-    #    output = F.grid_sample(
-    #        input, denormalize(points), align_corners=align_corners, **kwargs)
+    output = bilinear_grid_sample(input, denormalize(points), align_corners)
+    #output = F.grid_sample(input, denormalize(points), align_corners=align_corners, **kwargs)
     if add_dim:
         output = output.squeeze(3)
     return output
@@ -197,13 +223,13 @@ class SimpleRoIAlign(nn.Module):
         for batch_ind in range(num_imgs):
             # unravel batch dim
             feat = features[batch_ind].unsqueeze(0)
-            inds = (rois[:, 0].long() == batch_ind)
-            if inds.any():
+            #inds = (rois[:, 0].long() == batch_ind)
+            if num_imgs:#inds.any():
                 rel_img_points = rel_roi_point_to_rel_img_point(
-                    rois[inds], rel_roi_points[inds], feat.shape[2:],
+                    rois, rel_roi_points, feat.shape[2:],
                     self.spatial_scale).unsqueeze(0)
                 point_feat = point_sample(
-                    feat, rel_img_points, align_corners=not self.aligned, onnx_export=torch.onnx.is_in_onnx_export())
+                    feat, rel_img_points, align_corners=not self.aligned)
                 point_feat = point_feat.squeeze(0).transpose(0, 1)
                 point_feats.append(point_feat)
 
