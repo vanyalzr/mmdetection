@@ -15,11 +15,11 @@ def bilinear_grid_sample(im, grid, align_corners=False):
     y = grid[:, :, :, 1]
 
     if align_corners:
-        x = (((x + 1) / 2) * (w - 1))
-        y = (((y + 1) / 2) * (h - 1))
+        x = ((x + 1) / 2) * (w - 1)
+        y = ((y + 1) / 2) * (h - 1)
     else:
-        x = (((x + 1) * w - 1) / 2)
-        y = (((y + 1) * h - 1) / 2)
+        x = ((x + 1) * w - 1) / 2
+        y = ((y + 1) * h - 1) / 2
 
     x = x.view(n, -1)
     y = y.view(n, -1)
@@ -186,8 +186,10 @@ def point_sample(input, points, align_corners=False, **kwargs):
     if points.dim() == 3:
         add_dim = True
         points = points.unsqueeze(2)
-    output = bilinear_grid_sample(input, denormalize(points), align_corners)
-    #output = F.grid_sample(input, denormalize(points), align_corners=align_corners, **kwargs)
+    if torch.onnx.is_in_onnx_export():
+        output = bilinear_grid_sample(input, denormalize(points), align_corners)
+    else:
+        output = F.grid_sample(input, denormalize(points), align_corners=align_corners, **kwargs)
     if add_dim:
         output = output.squeeze(3)
     return output
