@@ -138,7 +138,7 @@ def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, 
 
     mean_values = normalize['mean']
     scale_values = normalize['std']
-    mo = 'python /programs/openvino/model-optimizer/mo.py'
+    mo = 'mo.py'
     command_line = f'{mo} --input_model="{onnx_model_path}" ' \
                    f'--mean_values="{mean_values}" ' \
                    f'--scale_values="{scale_values}" ' \
@@ -153,6 +153,8 @@ def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, 
             not normalize['to_rgb'] and input_format.lower() == 'rgb':
         command_line += ' --reverse_input_channels'
 
+    print(command_line)
+
     try:
         run(f'{mo} -h', stdout=DEVNULL, stderr=DEVNULL, shell=True, check=True)
     except CalledProcessError as ex:
@@ -160,7 +162,6 @@ def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, 
               'openvino/bin/setupvars.sh before running this script.')
         return
 
-    print(command_line)
     run(command_line, shell=True, check=True)
 
     if with_text:
