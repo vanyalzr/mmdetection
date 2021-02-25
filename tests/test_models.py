@@ -88,8 +88,8 @@ class PublicModelsTestCase(unittest.TestCase):
         cfg.merge_from_dict(update_args)
         with open(target_config_path, 'wt') as config_file:
             config_file.write(cfg.pretty_text)
-        if not self.test_on_full:
-            replace_text_in_file(target_config_path, 'keep_ratio=True', 'keep_ratio=False')
+        # if not self.test_on_full:
+        #     replace_text_in_file(target_config_path, 'keep_ratio=True', 'keep_ratio=False')
         return log_file, target_config_path
 
     def postrun(self, log_file, expected_output_file, metrics, thr):
@@ -259,7 +259,7 @@ class PublicModelsTestCase(unittest.TestCase):
         url = 'https://open-mmlab.s3.ap-northeast-2.amazonaws.com/mmdetection/v2.0/' \
               'foveabox/fovea_r50_fpn_4x4_1x_coco/fovea_r50_fpn_4x4_1x_coco_20200219-ee4d5303.pth'
         self.run_pytorch_test(origin_config, self.download_if_not_yet(url))
-    
+
     def test_pytorch_ms_rcnn__ms_rcnn_r50_caffe_fpn_2x_coco(self):
         origin_config = 'configs/ms_rcnn/ms_rcnn_r50_caffe_fpn_2x_coco.py'
         url = 'https://open-mmlab.s3.ap-northeast-2.amazonaws.com/mmdetection/v2.0/' \
@@ -495,7 +495,7 @@ class PublicModelsTestCase(unittest.TestCase):
     def test_onnx_retinanet_effd0_bifpn_1x_coco(self):
         origin_config = 'configs/efficientdet/retinanet_effd0_bifpn_1x_coco.py'
         url = 'https://storage.openvinotoolkit.org/repositories/mmdetection/models/efficientdet/' \
-              'retinanet_effd0_bifpn_1x_coco/epoch_300.pth' 
+              'retinanet_effd0_bifpn_1x_coco/epoch_300.pth'
         self.run_onnx_export_test(origin_config, self.download_if_not_yet(url))
 
 
