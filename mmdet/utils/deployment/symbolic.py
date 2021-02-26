@@ -29,7 +29,7 @@ def py_symbolic(op_name=None, namespace='mmdet_custom', adapter=None):
 
     A symbolic function cannot receive a collection of tensors as arguments.
     If your custom function takes a collection of tensors as arguments,
-    then you need to implement an argument converter (adapter) from the collection 
+    then you need to implement an argument converter (adapter) from the collection
     and pass it to the decorator.
 
     Args:
@@ -40,15 +40,15 @@ def py_symbolic(op_name=None, namespace='mmdet_custom', adapter=None):
     Adapter conventions:
         1. The adapter must have the same signature as the wrapped function.
         2. The values, returned by the adapter, must match the called symbolic function.
-        3. Return value order: 
+        3. Return value order:
             tensor values (collections are not supported)
             constant parameters (can be passed using a dictionary)
 
     Usage example:
         1. Implement a custom operation. For example 'custom_op'.
-        2. Implement a symbolic function to represent the custom_op in 
+        2. Implement a symbolic function to represent the custom_op in
             a computation graph. For example 'custom_op_symbolic'.
-        3. Register the operation before export: 
+        3. Register the operation before export:
             register_op('custom_op_name', custom_op_symbolic, namespace, opset)
         4. Decorate the custom operation:
             @py_symbolic(op_name='custom_op_name')
@@ -160,7 +160,7 @@ def nms_core_symbolic(g, dets, iou_thr, score_thr, max_num):
 
 
 def multiclass_nms_core_symbolic(g, multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1):
-    
+
     from torch.onnx.symbolic_opset9 import reshape, squeeze
     from torch.onnx.symbolic_opset10 import _slice
 
@@ -281,7 +281,7 @@ def register_extra_symbolics(opset=10):
     register_op('view_as', view_as_symbolic, '', opset)
     register_op('topk', topk_symbolic, '', opset)
     register_op('nms_core', nms_core_symbolic, 'mmdet_custom', opset)
-    # register_op('multiclass_nms_core', multiclass_nms_core_symbolic, 'mmdet_custom', opset)
+    register_op('multiclass_nms_core', multiclass_nms_core_symbolic, 'mmdet_custom', opset)
 
 
 def register_extra_symbolics_for_openvino(opset=10):
