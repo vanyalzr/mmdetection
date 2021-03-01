@@ -100,7 +100,7 @@ class PublicModelsTestCase(unittest.TestCase):
         reference_ap = content['map']
         print(f'expected {reference_ap} vs actual {ap}')
         for expected, actual, m in zip(reference_ap, ap, metrics):
-            if expected - thr > actual:
+            if abs(actual - expected) > thr:
                 raise AssertionError(f'{m}: {expected} (expected) - {thr} (threshold) > {actual}')
 
     def domain_check_for_custom_operations(self, config_dir):
