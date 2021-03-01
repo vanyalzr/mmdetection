@@ -75,6 +75,17 @@ class Model:
             self.net.reshape(input_shapes)
             self.exec_net = self.ie.load_network(network=self.net, device_name=self.device, num_requests=1)
 
+    def get(self, outputs, name):
+        try:
+            key = self.net.get_ov_name_for_tensor(name)
+            assert key in outputs, f'"{key}" is not a valid output identifier'
+        except KeyError:
+            if name not in outputs:
+                raise KeyError(f'Failed to identify output "{name}"')
+            key = name
+        print(f'get {name} {key}')
+        return outputs[key]
+
     def preprocess(self, inputs):
         return inputs
 
@@ -105,18 +116,44 @@ class Detector(Model):
         inputs = self.unify_inputs(inputs)
         output = super().__call__(inputs)
 
+        print(list(output.keys()))
+
         if 'detection_out' in output:
             detection_out = output['detection_out']
             output['labels'] = detection_out[0, 0, :, 1].astype(np.int32)
             output['boxes'] = detection_out[0, 0, :, 3:] * np.tile(inputs['image'].shape[:1:-1], 2)
             output['boxes'] = np.concatenate((output['boxes'], detection_out[0, 0, :, 2:3]), axis=1)
             del output['detection_out']
+            return output
 
+        #print(list(output.keys()))
+        #print(self.net.get_ov_name_for_tensor('labels'))
+        #print(list(output.keys()))
+        # self.net.add_outputs('labels')
+
+        #valid_detections_mask = output['labels'] >= 0
+        #output['labels'] = output['labels'][valid_detections_mask]
+        #output['boxes'] = output['boxes'][valid_detections_mask]
+        #if 'masks' in output:
+        #    output['masks'] = output['masks'][valid_detections_mask]
+
+        outs = output
+        output = {}
+        output = {
+            'labels': self.get(outs, 'labels'),
+            'boxes': self.get(outs, 'boxes')
+        }
         valid_detections_mask = output['labels'] >= 0
         output['labels'] = output['labels'][valid_detections_mask]
         output['boxes'] = output['boxes'][valid_detections_mask]
-        if 'masks' in output:
+        try:
+            output['masks'] = self.get(outs, 'masks')
             output['masks'] = output['masks'][valid_detections_mask]
+        except RuntimeError:
+            pass
+        #if 'masks' in output:
+        #    output['masks'] = self.get(outs, 'masks')
+        #    output['masks'] = output['masks'][valid_detections_mask]
 
         return output
 
