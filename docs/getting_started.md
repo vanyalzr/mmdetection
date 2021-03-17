@@ -5,24 +5,26 @@ For installation instructions, please see [install.md](install.md).
 
 # Table of contents
 
-- [Prepare datasets](#prepare-datasets)
-- [Export pretrained model to ONNX and OpenVINO IR](#export-pretrained-model-to-onnx-and-openvino-ir)
-- [Inference with pretrained models](#inference-with-pretrained-models)
-  - [Test using PyTorch](#test-using-pytorch)
-  - [Test using OpenVINO or ONNXRuntime](#test-using-openvino-or-onnxruntime)
-  - [Image demo](#image-demo)
-  - [Webcam demo](#webcam-demo)
-- [Train a model](#train-a-model)
-  - [Train with a single GPU](#train-with-a-single-gpu)
-  - [Train with multiple GPUs](#train-with-multiple-gpus)
-  - [Train with multiple machines](#train-with-multiple-machines)
-  - [Launch multiple jobs on a single machine](#launch-multiple-jobs-on-a-single-machine)
-- [Useful tools](#useful-tools)
-  - [Analyze logs](#analyze-logs)
-  - [Get the FLOPs and params (experimental)](#get-the-flops-and-params-experimental)
-  - [Publish a model](#publish-a-model)
-  - [Test the robustness of detectors](#test-the-robustness-of-detectors)
-- [Tutorials](#tutorials)
+- [Getting Started](#getting-started)
+- [Table of contents](#table-of-contents)
+  - [Prepare datasets](#prepare-datasets)
+  - [Export pretrained model to ONNX and OpenVINO IR](#export-pretrained-model-to-onnx-and-openvino-ir)
+  - [Inference with pretrained models](#inference-with-pretrained-models)
+    - [Test using PyTorch](#test-using-pytorch)
+    - [Test using OpenVINO or ONNXRuntime](#test-using-openvino-or-onnxruntime)
+    - [Image demo](#image-demo)
+    - [Webcam demo](#webcam-demo)
+  - [Train a model](#train-a-model)
+    - [Train with a single GPU](#train-with-a-single-gpu)
+    - [Train with multiple GPUs](#train-with-multiple-gpus)
+    - [Train with multiple machines](#train-with-multiple-machines)
+    - [Launch multiple jobs on a single machine](#launch-multiple-jobs-on-a-single-machine)
+  - [Useful tools](#useful-tools)
+    - [Analyze logs](#analyze-logs)
+    - [Get the FLOPs and params (experimental)](#get-the-flops-and-params-experimental)
+    - [Publish a model](#publish-a-model)
+    - [Test the robustness of detectors](#test-the-robustness-of-detectors)
+  - [Tutorials](#tutorials)
 
 
 ## Prepare datasets
@@ -100,7 +102,7 @@ To opt for this model representation use `--alt_ssd_export` option.
   To do this run the following command:
 
   ```shell
-  source /opt/intel/openvino/bin/setupvars.sh
+  source /opt/intel/openvino_2021/bin/setupvars.sh
   ```
 
 ## Inference with pretrained models
