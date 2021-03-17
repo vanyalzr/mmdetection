@@ -85,7 +85,7 @@ def export_to_onnx(model,
                 if getattr(model.roi_head, 'with_text', False):
                     output_names.append('text_features')
                     dynamic_axes['text_features'] = {0: 'objects_num'}
-        
+
         with torch.no_grad():
             model.export(
                 **data,
@@ -157,10 +157,8 @@ def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, 
 
     try:
         run(f'{mo} -h', stdout=DEVNULL, stderr=DEVNULL, shell=True, check=True)
-    except CalledProcessError as ex:
-        print('OpenVINO Model Optimizer not found, please source '
-              'openvino/bin/setupvars.sh before running this script.')
-        return
+    except CalledProcessError:
+        raise RuntimeError('OpenVINO Model Optimizer is not found or configured improperly')
 
     run(command_line, shell=True, check=True)
 
@@ -257,7 +255,7 @@ def main(args):
         if hasattr(model, 'roi_head'):
             if getattr(model.roi_head, 'with_text', False):
                 with_text = True
-    
+
     if args.target == 'openvino':
         input_shape = list(fake_data['img'][0].shape)
         if args.input_shape:
@@ -289,7 +287,7 @@ def parse_args():
                                  help='use alternative ONNX representation of SSD net')
     parser_openvino.add_argument('--input_format', choices=['BGR', 'RGB'], default='BGR',
                                  help='Input image format for exported model.')
-    
+
     args = parser.parse_args()
     return args
 
