@@ -150,8 +150,7 @@ class PublicModelsTestCase(unittest.TestCase):
         with open(log_file, 'w') as log_f:
             error = None
             try:
-                run(f'/opt/intel/openvino/bin/setupvars.sh && '
-                    f'python tools/export.py '
+                run(f'python tools/export.py '
                     f'{target_config_path} '
                     f'{snapshot} '
                     f'{test_dir} '
@@ -165,8 +164,7 @@ class PublicModelsTestCase(unittest.TestCase):
             self.domain_check_for_custom_operations(test_dir)
 
             try:
-                run(f'/opt/intel/openvino/bin/setupvars.sh && '
-                    f'python tools/test_exported.py '
+                run(f'python tools/test_exported.py '
                     f'{target_config_path} '
                     f'{osp.join(test_dir, "config.xml")} '
                     f'--out res.pkl --eval {metrics_str} 2>&1 | tee {log_file}',
