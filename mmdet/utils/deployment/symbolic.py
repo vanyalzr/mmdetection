@@ -275,13 +275,12 @@ def roi_feature_extractor_symbolics(g, rois, *feats, output_size=1, featmap_stri
     return roi_feats
 
 
-
 def register_extra_symbolics(opset=10):
     assert opset >= 10
     register_op('view_as', view_as_symbolic, '', opset)
     register_op('topk', topk_symbolic, '', opset)
     register_op('nms_core', nms_core_symbolic, 'mmdet_custom', opset)
-    register_op('multiclass_nms_core', multiclass_nms_core_symbolic, 'mmdet_custom', opset)
+    # register_op('multiclass_nms_core', multiclass_nms_core_symbolic, 'mmdet_custom', opset)
 
 
 def register_extra_symbolics_for_openvino(opset=10):

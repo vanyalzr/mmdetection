@@ -89,4 +89,3 @@ def multiclass_nms_core(multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=
         dets = dets[:max_num]
 
     return dets
-
