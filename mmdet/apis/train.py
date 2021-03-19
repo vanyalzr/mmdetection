@@ -9,10 +9,13 @@ from mmcv.runner import (DistSamplerSeedHook, EpochBasedRunner, LoggerHook,
 from mmdet.core import (DistEvalHook, DistEvalPlusBeforeRunHook, EvalHook,
                         EvalPlusBeforeRunHook, Fp16OptimizerHook)
 from mmdet.datasets import build_dataloader, build_dataset
-from mmdet.integration.nncf import CompressionHook, wrap_nncf_model
+from mmdet.integration.nncf import CompressionHook, wrap_nncf_model, AccuracyAwareRunner
 from mmdet.parallel import MMDataCPU
 from mmdet.utils import get_root_logger
 from .fake_input import get_fake_input
+
+from nncf.initialization import register_training_loop_args
+from nncf import NNCFConfig
 
 
 def set_random_seed(seed, deterministic=False):
@@ -119,7 +122,7 @@ def train_detector(model,
 
     # build runner
     optimizer = build_optimizer(model, cfg.optimizer)
-    runner = EpochBasedRunner(
+    runner = AccuracyAwareRunner(
         model,
         optimizer=optimizer,
         work_dir=cfg.work_dir,
@@ -168,4 +171,16 @@ def train_detector(model,
     if cfg.resume_from:
         runner.resume(cfg.resume_from, map_location=map_location)
 
-    runner.run(data_loaders, cfg.workflow, cfg.total_epochs, compression_ctrl=compression_ctrl)
+    def configure_optimizers():
+        optimizer = build_optimizer(runner.model, cfg.optimizer)
+        return optimizer, None
+
+    nncf_config = NNCFConfig(cfg.nncf_config)
+    nncf_config = register_training_loop_args(nncf_config,
+                                              train_epoch_fn=runner.train_fn,
+                                              eval_fn=runner.validation_fn,
+                                              configure_optimizers_fn=configure_optimizers,
+                                              on_training_end_fn=runner.on_training_end_fn)
+
+    runner.run(data_loaders, cfg.workflow, cfg.total_epochs,
+               compression_ctrl=compression_ctrl, nncf_config=nncf_config)

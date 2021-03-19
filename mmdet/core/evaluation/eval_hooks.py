@@ -32,6 +32,7 @@ class EvalHook(Hook):
         for name, val in eval_res.items():
             runner.log_buffer.output[name] = val
         runner.log_buffer.ready = True
+        self.eval_result = eval_res['bbox_mAP']
 
 
 class DistEvalHook(EvalHook):
