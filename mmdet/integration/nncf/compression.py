@@ -79,6 +79,7 @@ def get_nncf_config_from_meta(path):
 
 def wrap_nncf_model(model,
                     cfg,
+                    model_eval_fn=None,
                     data_loader_for_init=None,
                     get_fake_input_func=None,
                     is_alt_ssd_export=False):
@@ -90,15 +91,17 @@ def wrap_nncf_model(model,
 
     check_nncf_is_enabled()
 
-    from nncf import (NNCFConfig, create_compressed_model,
-                      register_default_init_args)
-    from nncf.dynamic_graph.io_handling import nncf_model_input
-    from nncf.dynamic_graph.trace_tensor import TracedTensor
-    from nncf.initialization import InitializingDataLoader
+    from nncf import NNCFConfig
+    from nncf.torch import create_compressed_model
+    from nncf.torch.initialization import register_default_init_args
 
-    class MMInitializeDataLoader(InitializingDataLoader):
+    from nncf.torch.dynamic_graph.io_handling import nncf_model_input
+    from nncf.torch.dynamic_graph.trace_tensor import TracedTensor
+    from nncf.torch.initialization import PTInitializingDataLoader
+
+    class MMInitializeDataLoader(PTInitializingDataLoader):
         def get_inputs(self, dataloader_output):
-            # redefined InitializingDataLoader because
+            # redefined PTInitializingDataLoader because
             # of DataContainer format in mmdet
             kwargs = {k: v.data[0] for k, v in dataloader_output.items()}
             return (), kwargs
@@ -109,7 +112,9 @@ def wrap_nncf_model(model,
 
     if data_loader_for_init:
         wrapped_loader = MMInitializeDataLoader(data_loader_for_init)
-        nncf_config = register_default_init_args(nncf_config, wrapped_loader, device=next(model.parameters()).device)
+        nncf_config = register_default_init_args(nncf_config, wrapped_loader,
+                                                 model_eval_fn=model_eval_fn,
+                                                 device=next(model.parameters()).device)
 
     if cfg.get('resume_from'):
         checkpoint_path = cfg.get('resume_from')

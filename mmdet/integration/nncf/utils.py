@@ -66,7 +66,7 @@ def no_nncf_trace():
     """
 
     if is_nncf_enabled():
-        from nncf.dynamic_graph.context import no_nncf_trace as original_no_nncf_trace
+        from nncf.torch.dynamic_graph.context import no_nncf_trace as original_no_nncf_trace
         return original_no_nncf_trace()
     return nullcontext()
 
@@ -75,10 +75,17 @@ def is_in_nncf_tracing():
     if not is_nncf_enabled():
         return False
 
-    from nncf.dynamic_graph.context import get_current_context
+    from nncf.torch.dynamic_graph.context import get_current_context
 
     ctx = get_current_context()
 
     if ctx is None:
         return False
     return ctx.is_tracing
+
+
+def is_accuracy_aware_training_set(nncf_config):
+    if not is_nncf_enabled():
+        return False
+    from nncf.config.utils import is_accuracy_aware_training
+    return is_accuracy_aware_training(nncf_config)
